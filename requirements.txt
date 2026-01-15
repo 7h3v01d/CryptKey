@@ -1,0 +1,6 @@
+PyQt6 
+cryptography 
+argon2-cffi 
+zxcvbn 
+tqdm
+sdelete

@@ -1,0 +1,1 @@
+pyinstaller --noconfirm --onefile --console --icon=icon.ico --add-data "file_encryptor_enhanced.py;." --name SecureFileEncryptor file_encryptor_enhanced.py
