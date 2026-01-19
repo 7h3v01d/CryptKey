@@ -1,68 +1,110 @@
-# Enhanced Python Import Cycle Scanner & Visualizer
+Crptykey
+Private Evaluation & Testing License (PETL) v1.0
 
-⚠️ **LICENSE & USAGE NOTICE — READ FIRST**
+Copyright © 2026
+All rights reserved.
 
-This repository is **source-available for private technical evaluation and testing only**.
+----------------------------------------------------------------------
+IMPORTANT — READ CAREFULLY
+----------------------------------------------------------------------
 
-- ❌ No commercial use  
-- ❌ No production use  
-- ❌ No academic, institutional, or government research use  
-- ❌ No redistribution, sublicensing, or relicensing  
-- ❌ No derivative works or independent development based on this code  
-- ❌ No benchmarking, publication, or inclusion in reports or papers  
+This software is NOT open-source.
 
-All rights remain exclusively with the author.  
-Use of this software constitutes acceptance of the terms defined in **LICENSE.txt**.
+This repository is made available solely for private technical
+evaluation and testing purposes, including code review, architectural
+assessment, and non-production experimentation by the individual
+recipient.
 
----
+Accessing, cloning, viewing, or using this repository constitutes
+acceptance of the terms below.
 
-## Overview
+----------------------------------------------------------------------
+PERMITTED USE
+----------------------------------------------------------------------
 
-**Enhanced Python Import Cycle Scanner & Visualizer** is a modern desktop and CLI tool designed to analyze Python project structures, detect circular imports, and visualize module dependencies through an interactive graph interface.
+You are permitted to:
 
-This repository is published **solely for evaluation and showcase purposes**, demonstrating implementation quality, architectural decisions, and tooling approach.
+• View the source code
+• Run the software locally for private evaluation and testing
+• Inspect architecture, structure, and implementation techniques
+• Report bugs or provide feedback to the author
+• Submit suggested changes or pull requests for review
 
----
+All permitted use must be:
+• Non-commercial
+• Non-production
+• Non-institutional
+• Non-academic
+• Non-governmental
+• Non-research-oriented
 
-## Features
+----------------------------------------------------------------------
+PROHIBITED USE
+----------------------------------------------------------------------
 
-- Scans entire Python projects for **module-to-module import relationships**
-- Detects **circular dependencies** using graph analysis (strongly connected components)
-- Interactive **dependency graph visualization** (pyvis + vis.js)
-  - Red nodes indicate modules involved in cycles
-  - Zoom, pan, drag, and hover for inspection
-- Structured **tree/table view** of modules and imports
-- Visual highlighting of cyclic modules
-- One-click **rescan** (Ctrl+R)
-- **JSON export** of dependency data
-- Operates as both:
-  - Desktop GUI application
-  - Lightweight CLI analysis tool
-- Fully local execution (no internet access required)
+The following are strictly prohibited without prior written permission
+from the copyright holder:
 
----
+• Commercial use of any kind
+• Production deployment or operational use
+• Academic, institutional, or government use
+• Research use, including experiments, studies, benchmarking, or papers
+• Publication of results, metrics, screenshots, or analyses
+• Redistribution or sublicensing in any form
+• Repackaging or bundling with other software
+• Creation of derivative works
+• Independent development based on this code
+• Copying of algorithms, structure, or implementation patterns
+• Use as training data for machine learning or AI systems
+• Reverse engineering for competitive or substitute products
 
-## Screenshots
+----------------------------------------------------------------------
+CONTRIBUTIONS
+----------------------------------------------------------------------
 
-*(Screenshots intentionally omitted from the public repository.  
-You may add local screenshots for private evaluation if desired.)*
+You may submit suggestions, issues, or pull requests.
 
----
+However:
 
-## Requirements
+• Submission of contributions does NOT grant any license or rights
+• Ownership of all code remains exclusively with the author
+• The author may accept, modify, or reject contributions at discretion
+• Contributors receive no rights to reuse, redistribute, or repurpose
+  any portion of the codebase
 
-- Python **3.9+**
-- PyQt6  
-- pyvis  
+----------------------------------------------------------------------
+INTELLECTUAL PROPERTY
+----------------------------------------------------------------------
 
-Optional:
-- PySide6 (alternative Qt backend)
+All intellectual property rights, including but not limited to
+copyright, design, architecture, algorithms, and implementation,
+remain the exclusive property of the author.
 
----
+No rights are granted except those explicitly stated in this license.
 
-## Installation (Evaluation Use Only)
+----------------------------------------------------------------------
+NO WARRANTY
+----------------------------------------------------------------------
 
-### Minimal dependencies
+This software is provided “AS IS”, without warranty of any kind,
+express or implied, including but not limited to fitness for a
+particular purpose, accuracy, or reliability.
 
-```bash
-pip install PyQt6 pyvis
+----------------------------------------------------------------------
+TERMINATION
+----------------------------------------------------------------------
+
+Any violation of this license immediately terminates all permissions
+granted herein. Upon termination, you must delete all copies of the
+software in your possession.
+
+----------------------------------------------------------------------
+CONTACT
+----------------------------------------------------------------------
+
+For permission requests, licensing inquiries, or commercial discussions,
+contact the author directly.
+
+----------------------------------------------------------------------
+END OF LICENSE
+----------------------------------------------------------------------
