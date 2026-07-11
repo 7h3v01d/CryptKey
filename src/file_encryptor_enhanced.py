@@ -862,6 +862,21 @@ class FileEncryptor(QMainWindow):
         self.start_btn = QPushButton("▶  Start")
         self.start_btn.setObjectName("primary")
         self.start_btn.setMinimumHeight(42)
+        self.start_btn.setStyleSheet(f"""
+            QPushButton#primary {{
+                background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
+                    stop:0 {C['accent']}, stop:1 {C['accent_dim']});
+                color: #000; border: none; font-weight: 700;
+                font-size: 14px; padding: 10px 28px; border-radius: 8px; letter-spacing: 0.5px;
+            }}
+            QPushButton#primary:hover {{
+                background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
+                    stop:0 #33ECFF, stop:1 {C['accent']}); color: #000;
+            }}
+            QPushButton#primary:disabled {{
+                background: {C['surface2']}; color: {C['text_xdim']};
+            }}
+        """)
         self.start_btn.clicked.connect(self._start_operation)
         self.cancel_btn = QPushButton("✕  Cancel")
         self.cancel_btn.setObjectName("danger")
@@ -962,7 +977,22 @@ class FileEncryptor(QMainWindow):
         kl.addWidget(self.lic_key_edit)
         kr = QHBoxLayout()
         ab = QPushButton("Apply License Key")
-        ab.setObjectName("primary")
+        ab.setObjectName("primaryApply")
+        ab.setStyleSheet(f"""
+            QPushButton#primaryApply {{
+                background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
+                    stop:0 {C['accent']}, stop:1 {C['accent_dim']});
+                color: #000; border: none; font-weight: 700;
+                font-size: 14px; padding: 10px 28px; border-radius: 8px; letter-spacing: 0.5px;
+            }}
+            QPushButton#primaryApply:hover {{
+                background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
+                    stop:0 #33ECFF, stop:1 {C['accent']}); color: #000;
+            }}
+            QPushButton#primaryApply:disabled {{
+                background: {C['surface2']}; color: {C['text_xdim']};
+            }}
+        """)
         ab.clicked.connect(self._apply_license_page)
         rb2 = QPushButton("Remove License")
         rb2.setObjectName("danger")
