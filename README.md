@@ -1,4 +1,4 @@
-# CryptKey v1.6.0
+# CryptKey v2.1.0
 ### Secure File and Directory Encryptor
 
 A Python application for securely encrypting and decrypting files and directories using AES-256-GCM for encryption, Argon2 for key derivation, and zlib for compression2.
