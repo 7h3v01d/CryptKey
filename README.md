@@ -140,5 +140,5 @@ Submit issues or pull requests to the repository (TBD).
 
 ---
 ## License
-MIT License. See source code for details.
+Leon Priest (7h3v01d).
 
