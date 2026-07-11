@@ -5,7 +5,7 @@ a = Analysis(
     ['file_encryptor_enhanced.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('icon.ico', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

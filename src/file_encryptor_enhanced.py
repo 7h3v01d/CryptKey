@@ -40,6 +40,17 @@ from cryptography.hazmat.backends import default_backend
 from zxcvbn import zxcvbn
 from tqdm import tqdm
 
+
+def resource_path(relative_path: str) -> str:
+    """
+    Resolve a path to a bundled resource (e.g. icon.ico) that works both
+    when running from source and when frozen into a PyInstaller onefile
+    executable (which unpacks data files to a temp dir at sys._MEIPASS).
+    """
+    base_path = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base_path, relative_path)
+
+
 # ─────────────────────────────────────────────────────────
 #  DESIGN TOKENS
 # ─────────────────────────────────────────────────────────
@@ -649,6 +660,7 @@ class FileEncryptor(QMainWindow):
             self._license_info.get("tier", "free"), LICENSE_TIERS["free"])
 
         self.setWindowTitle("CryptKey 2.1 – Secure File Encryptor")
+        self.setWindowIcon(QIcon(resource_path("icon.ico")))
         self.setMinimumSize(820, 660)
         self.resize(920, 700)
 
@@ -1391,6 +1403,7 @@ def main():
             app = QApplication(sys.argv)
             app.setStyleSheet(STYLESHEET)
             app.setStyle("Fusion")
+            app.setWindowIcon(QIcon(resource_path("icon.ico")))
             window = FileEncryptor()
             window.show()
             sys.exit(app.exec())
