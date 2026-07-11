@@ -1,0 +1,5 @@
+{
+  "created": "2026-07-11T12:49:16.509122",
+  "public_key_b64": "LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUNvd0JRWURLMlZ3QXlFQWtxTTlTNXprSUtIU3cyQXZyeldLS25BUERyaC9GaFplcXNabmFtSENoNlU9Ci0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLQo=",
+  "note": "Embed public_key_b64 in the CryptKey app source (LICENSE_PUBLIC_KEY)."
+}

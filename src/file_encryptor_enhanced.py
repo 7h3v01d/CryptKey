@@ -1,3 +1,9 @@
+"""
+CryptKey v2.1.0 – Secure File & Directory Encryptor
+Author  : Leon Priest <leonpriest76@gmail.com>
+License : See LicenseManager for commercial / MIT details
+"""
+
 import sys
 import os
 import zlib
@@ -8,18 +14,23 @@ import string
 import json
 import getpass
 import traceback
-import base64
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Dict, Any, Callable
+
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QFileDialog, QLineEdit, QLabel, QProgressBar,
     QMessageBox, QRadioButton, QGroupBox, QCheckBox,
-    QListWidget, QMenu, QTextEdit, QScrollArea
+    QListWidget, QMenu, QTextEdit, QFrame,
+    QDialog, QSizePolicy, QStackedWidget
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSettings
-from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QIcon, QPixmap, QImage, QFont
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSettings, QTimer
+from PyQt6.QtGui import (
+    QDragEnterEvent, QDropEvent, QIcon, QPixmap, QImage, QFont,
+    QColor, QPalette, QPainter, QLinearGradient, QBrush, QPen
+)
 from argon2 import PasswordHasher, low_level
 from argon2.exceptions import HashingError
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -29,14 +40,214 @@ from cryptography.hazmat.backends import default_backend
 from zxcvbn import zxcvbn
 from tqdm import tqdm
 
-# --- Self-Contained Icon ---
-ICON_SVG_B64 = b'PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzQ0NDQ0NCI+PHBhdGggZD0iTTE4IDhoLTFWNmMwLTIuNzYtMi4yNC01LTUtNVM3IDMuMjQgNyA2djJINmMtMS4xIDAtMiAuOS0yIDJ2MTBjMCAxLjEuOSAyIDIgMmgxMmMxLjEgMCAyLS45IDItMlYxMGMwLTEuMS0uOS0yLTItMnpmTTkgNmMwLTEuNjYgMS4zNC0zIDMtM3MzIDEuMzQgMyAzdjJIOVY2eiIvPjwvc3ZnPg=='
+# ─────────────────────────────────────────────────────────
+#  DESIGN TOKENS
+# ─────────────────────────────────────────────────────────
+C = {
+    "bg":          "#0D0F14",
+    "surface":     "#141720",
+    "surface2":    "#1C2030",
+    "border":      "#252A3A",
+    "accent":      "#00E5FF",
+    "accent_dim":  "#009AB5",
+    "green":       "#00FFB2",
+    "yellow":      "#FFD166",
+    "red":         "#FF4D6D",
+    "text":        "#E8EDF5",
+    "text_dim":    "#7A8499",
+    "text_xdim":   "#3E4559",
+}
 
-# --- Global variable for log file path ---
+STYLESHEET = f"""
+QWidget {{
+    color: {C['text']};
+    font-family: 'Segoe UI', 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 13px;
+}}
+QMainWindow {{ background-color: {C['bg']}; }}
+QLabel, QCheckBox, QRadioButton {{ background: transparent; }}
+QTabWidget::pane {{
+    border: 1px solid {C['border']};
+    border-radius: 8px;
+    background: {C['surface']};
+    margin-top: -1px;
+}}
+QTabBar::tab {{
+    background: transparent; color: {C['text_dim']};
+    padding: 10px 22px; border: none;
+    font-size: 13px; font-weight: 500; letter-spacing: 0.5px;
+}}
+QTabBar::tab:selected {{ color: {C['accent']}; border-bottom: 2px solid {C['accent']}; }}
+QTabBar::tab:hover:!selected {{ color: {C['text']}; }}
+QGroupBox {{
+    background: {C['surface']}; border: 1px solid {C['border']};
+    border-radius: 8px; margin-top: 18px;
+    padding: 12px 10px 10px 10px;
+    font-weight: 600; font-size: 11px; letter-spacing: 0.8px; color: {C['text_dim']};
+}}
+QGroupBox::title {{
+    subcontrol-origin: margin; subcontrol-position: top left;
+    left: 12px; padding: 0 6px;
+    background: {C['surface']}; color: {C['text_dim']};
+}}
+QPushButton {{
+    background: {C['surface2']}; color: {C['text']};
+    border: 1px solid {C['border']}; border-radius: 6px;
+    padding: 8px 18px; font-weight: 500; font-size: 13px;
+}}
+QPushButton:hover {{
+    background: {C['border']}; border-color: {C['accent_dim']}; color: {C['accent']};
+}}
+QPushButton:pressed {{ background: {C['surface']}; }}
+QPushButton:disabled {{ color: {C['text_xdim']}; border-color: {C['text_xdim']}; background: {C['surface']}; }}
+QPushButton#primary {{
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
+        stop:0 {C['accent']}, stop:1 {C['accent_dim']});
+    color: #000; border: none; font-weight: 700;
+    font-size: 14px; padding: 10px 28px; border-radius: 8px; letter-spacing: 0.5px;
+}}
+QPushButton#primary:hover {{
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
+        stop:0 #33ECFF, stop:1 {C['accent']}); color: #000;
+}}
+QPushButton#primary:disabled {{ background: {C['surface2']}; color: {C['text_xdim']}; }}
+QPushButton#danger {{
+    background: transparent; color: {C['red']}; border: 1px solid {C['red']};
+}}
+QPushButton#danger:hover {{ background: rgba(255,77,109,0.12); }}
+QLineEdit {{
+    background: {C['surface2']}; border: 1px solid {C['border']};
+    border-radius: 6px; padding: 8px 12px; color: {C['text']};
+    selection-background-color: {C['accent']}; selection-color: #000;
+}}
+QLineEdit:focus {{ border: 1px solid {C['accent']}; background: {C['surface']}; }}
+QListWidget {{
+    background: {C['surface2']}; border: 1px solid {C['border']};
+    border-radius: 8px; padding: 6px; color: {C['text']}; outline: none;
+}}
+QListWidget::item {{ padding: 7px 10px; border-radius: 4px; margin: 1px 0; }}
+QListWidget::item:hover {{ background: {C['border']}; }}
+QListWidget::item:selected {{ background: rgba(0,229,255,0.12); color: {C['accent']}; }}
+QProgressBar {{
+    background: {C['surface2']}; border: 1px solid {C['border']};
+    border-radius: 5px; height: 8px; color: transparent;
+}}
+QProgressBar::chunk {{
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
+        stop:0 {C['accent']}, stop:1 {C['green']}); border-radius: 5px;
+}}
+QCheckBox {{ spacing: 8px; color: {C['text']}; }}
+QCheckBox::indicator {{
+    width: 18px; height: 18px; border: 1px solid {C['border']};
+    border-radius: 4px; background: {C['surface2']};
+}}
+QCheckBox::indicator:checked {{ background: {C['accent']}; border-color: {C['accent']}; }}
+QRadioButton {{ spacing: 8px; color: {C['text']}; }}
+QRadioButton::indicator {{
+    width: 18px; height: 18px; border: 1px solid {C['border']};
+    border-radius: 9px; background: {C['surface2']};
+}}
+QRadioButton::indicator:checked {{ background: {C['accent']}; border-color: {C['accent']}; }}
+QTextEdit {{
+    background: {C['surface2']}; border: 1px solid {C['border']};
+    border-radius: 6px; padding: 8px; color: {C['text_dim']};
+    font-family: 'Cascadia Code','JetBrains Mono','Courier New',monospace; font-size: 11px;
+}}
+QScrollBar:vertical {{
+    background: {C['surface']}; width: 8px; border-radius: 4px;
+}}
+QScrollBar::handle:vertical {{
+    background: {C['border']}; border-radius: 4px; min-height: 30px;
+}}
+QScrollBar::handle:vertical:hover {{ background: {C['accent_dim']}; }}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+QMenu {{
+    background: {C['surface2']}; border: 1px solid {C['border']};
+    border-radius: 6px; padding: 4px;
+}}
+QMenu::item {{ padding: 7px 20px; border-radius: 4px; }}
+QMenu::item:selected {{ background: rgba(0,229,255,0.12); color: {C['accent']}; }}
+QDialog {{ background: {C['surface']}; border: 1px solid {C['border']}; }}
+QFrame[frameShape="4"], QFrame[frameShape="5"] {{
+    color: {C['border']}; background: {C['border']}; border: none; max-height: 1px;
+}}
+"""
+
+# ─────────────────────────────────────────────────────────
+#  LOGGING
+# ─────────────────────────────────────────────────────────
 LOG_FILE_PATH = None
 
-# --- File format constants ---
-MAGIC_NUMBER = b'ENC1'  # New format identifier
+def setup_logging():
+    global LOG_FILE_PATH
+    if logging.getLogger().hasHandlers():
+        return
+    try:
+        if sys.platform == "win32":
+            log_dir = Path(os.getenv('APPDATA', Path.home())) / "CryptKey"
+        else:
+            log_dir = Path.home() / ".local/share/CryptKey"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / 'cryptkey.log'
+        logging.basicConfig(
+            filename=log_file, level=logging.INFO,
+            format='%(asctime)s [%(levelname)s] %(message)s', force=True)
+        LOG_FILE_PATH = str(log_file)
+        logging.info("── CryptKey v2.1.0 started ──")
+        return log_file
+    except Exception as e:
+        logging.basicConfig(level=logging.INFO,
+                            format='%(asctime)s [%(levelname)s] %(message)s', force=True)
+        logging.error(f"File logging setup failed: {e}")
+
+# ─────────────────────────────────────────────────────────
+#  LICENSE MANAGER  (Ed25519 – uses shared cryptkey_license module)
+# ─────────────────────────────────────────────────────────
+from cryptkey_license import (
+    LICENSE_TIERS,
+    machine_id as _machine_id,
+    validate_license_key as _validate_license_key_raw,
+)
+
+# ── Embed your public key here ───────────────────────────
+# Run the license generator, click "Show Public Key", and
+# paste the constant it gives you below.
+# Until you do, the app runs in Free tier for everyone.
+LICENSE_PUBLIC_KEY = "LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUNvd0JRWURLMlZ3QXlFQWtxTTlTNXprSUtIU3cyQXZyeldLS25BUERyaC9GaFplcXNabmFtSENoNlU9Ci0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLQo="
+
+
+def validate_license_key(key_str: str) -> Dict[str, Any]:
+    """Wrapper: injects the embedded public key automatically."""
+    if not LICENSE_PUBLIC_KEY:
+        # No public key embedded yet — accept no paid keys,
+        # treat everyone as Free (safe fallback during development).
+        if not key_str:
+            return {"valid": False, "tier": "free", "expiry": None,
+                    "message": "No license key – running as Free tier."}
+        return {"valid": False, "tier": "free", "expiry": None,
+                "message": "⚠ App not configured: LICENSE_PUBLIC_KEY is empty. "
+                           "Embed your public key to enable license verification."}
+    return _validate_license_key_raw(key_str, LICENSE_PUBLIC_KEY)
+
+
+class LicenseStore:
+    @staticmethod
+    def load() -> str:
+        return QSettings("CryptKey", "License").value("license_key", "")
+
+    @staticmethod
+    def save(key_str: str):
+        QSettings("CryptKey", "License").setValue("license_key", key_str)
+
+    @staticmethod
+    def clear():
+        QSettings("CryptKey", "License").remove("license_key")
+
+
+# ─────────────────────────────────────────────────────────
+#  CRYPTO ENGINE
+# ─────────────────────────────────────────────────────────
+MAGIC_NUMBER = b'ENC1'
 MAGIC_SIZE = 4
 CHUNK_SIZE = 8192
 SALT_SIZE = 16
@@ -44,39 +255,13 @@ NONCE_SIZE = 12
 TAG_SIZE = 16
 HEADER_LEN_SIZE = 4
 KEY_LEN = 32
-INVALID_MAGIC_NUMBERS = {b'INVA'}  # Known invalid magic numbers
+INVALID_MAGIC_NUMBERS = {b'INVA'}
 
-def setup_logging():
-    """Configure logging to a user-writable directory."""
-    global LOG_FILE_PATH
-    if logging.getLogger().hasHandlers():
-        return
-    try:
-        if sys.platform == "win32":
-            log_dir = Path(os.getenv('APPDATA', Path.home())) / "FileEncryptor"
-        else:
-            log_dir = Path.home() / ".local/share/FileEncryptor"
-
-        log_dir.mkdir(parents=True, exist_ok=True)
-        log_file = log_dir / 'file_encryptor.log'
-        
-        logging.basicConfig(
-            filename=log_file, level=logging.INFO,
-            format='%(asctime)s - %(levelname)s - %(message)s', force=True)
-        LOG_FILE_PATH = str(log_file)
-        logging.info("--- Logging initialized successfully ---")
-        return log_file
-    except Exception as e:
-        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', force=True)
-        logging.error(f"Failed to configure file logging. Reason: {e}")
-        logging.info("Logging will proceed in the console.")
-        return None
 
 class CryptoEngine:
-    """Handles all cryptographic operations. Does not interact with PyQt."""
     def __init__(self):
         self.backend = default_backend()
-        self.ph = PasswordHasher(time_cost=4, memory_cost=2**17, parallelism=8)
+        self.ph = PasswordHasher(time_cost=4, memory_cost=2 ** 17, parallelism=8)
 
     def derive_key(self, password: str, salt: bytes, key_file: Optional[str] = None) -> bytes:
         try:
@@ -84,34 +269,31 @@ class CryptoEngine:
             if key_file and os.path.exists(key_file):
                 with open(key_file, 'rb') as f:
                     key_data = f.read(1024)
-                    if len(key_data) > 1024:
-                        raise ValueError("Key file too large (max 1KB)")
-                    digest = hashes.Hash(hashes.SHA256(), backend=self.backend)
-                    digest.update(key_data)
-                    secret += digest.finalize()
+                digest = hashes.Hash(hashes.SHA256(), backend=self.backend)
+                digest.update(key_data)
+                secret += digest.finalize()
             return low_level.hash_secret_raw(
-                secret=secret, salt=salt, time_cost=self.ph.time_cost,
-                memory_cost=self.ph.memory_cost, parallelism=self.ph.parallelism,
+                secret=secret, salt=salt,
+                time_cost=self.ph.time_cost, memory_cost=self.ph.memory_cost,
+                parallelism=self.ph.parallelism,
                 hash_len=KEY_LEN, type=low_level.Type.ID)
         except HashingError as e:
-            logging.error(f"Key derivation failed: {e}")
             raise ValueError("Key derivation failed.")
 
     @staticmethod
     def validate_password(password: str) -> Dict[str, Any]:
-        if not password: return {'score': -1, 'feedback': {'warning': 'Password cannot be empty.'}}
+        if not password:
+            return {'score': -1, 'feedback': {'warning': 'Password cannot be empty.'}}
         return zxcvbn(password)
 
-    def _cleanup_partial_file(self, path: str):
+    def _cleanup(self, path: str):
         if path and os.path.exists(path):
             try:
                 os.remove(path)
-                logging.warning(f"Cleaned up partial file: {path}")
-            except OSError as e:
-                logging.error(f"Failed to clean up partial file {path}: {e}")
+            except OSError:
+                pass
 
     def shred_file(self, file_path: str, passes: int = 3) -> bool:
-        """Securely shred a file by overwriting it multiple times."""
         try:
             file_size = os.path.getsize(file_path)
             with open(file_path, 'r+b') as f:
@@ -121,38 +303,35 @@ class CryptoEngine:
                 f.flush()
                 os.fsync(f.fileno())
             os.remove(file_path)
-            logging.info(f"Successfully shredded file: {file_path}")
+            logging.info(f"Shredded: {file_path}")
             return True
         except Exception as e:
-            logging.error(f"Failed to shred file {file_path}: {e}")
+            logging.error(f"Shred failed: {e}")
             return False
 
     def encrypt_file(self, input_path: str, output_path: str, password: str,
                      key_file: Optional[str] = None,
-                     progress_callback: Optional[Callable[[int], None]] = None,
-                     status_signal: Optional[pyqtSignal] = None,
+                     progress_callback=None, status_signal=None,
                      cancel_flag: Optional[List[bool]] = None,
                      cli_mode: bool = False) -> bool:
         try:
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
             salt, nonce = secrets.token_bytes(SALT_SIZE), secrets.token_bytes(NONCE_SIZE)
             key = self.derive_key(password, salt, key_file)
             digest = hashes.Hash(hashes.SHA256(), backend=self.backend)
             with open(input_path, 'rb') as f_in:
                 while chunk := f_in.read(CHUNK_SIZE):
                     digest.update(chunk)
-            metadata = {
-                'original_filename': os.path.basename(input_path),
-                'sha256': digest.finalize().hex()
-            }
+            metadata = {'original_filename': os.path.basename(input_path),
+                        'sha256': digest.finalize().hex()}
             header_bytes = json.dumps(metadata).encode('utf-8')
             header_len_bytes = len(header_bytes).to_bytes(HEADER_LEN_SIZE, 'big')
             encryptor = Cipher(algorithms.AES(key), modes.GCM(nonce), backend=self.backend).encryptor()
             total_size = os.path.getsize(input_path)
             processed_bytes = 0
             last_progress = -1
-            pbar = tqdm(total=total_size, unit="B", unit_scale=True, desc=f"Encrypting {os.path.basename(input_path)}", leave=False) if cli_mode else None
-
+            pbar = tqdm(total=total_size, unit="B", unit_scale=True,
+                        desc=f"Encrypting {os.path.basename(input_path)}", leave=False) if cli_mode else None
             with open(input_path, 'rb') as f_in, open(output_path, 'wb') as f_out:
                 f_out.write(MAGIC_NUMBER)
                 f_out.write(salt)
@@ -161,197 +340,159 @@ class CryptoEngine:
                 f_out.write(encryptor.update(header_bytes))
                 compressor = zlib.compressobj()
                 while True:
-                    if cancel_flag and cancel_flag[0]: raise InterruptedError("Operation cancelled.")
+                    if cancel_flag and cancel_flag[0]:
+                        raise InterruptedError("Cancelled.")
                     chunk = f_in.read(CHUNK_SIZE)
-                    if not chunk: break
-                    compressed_chunk = compressor.compress(chunk)
-                    if compressed_chunk: f_out.write(encryptor.update(compressed_chunk))
+                    if not chunk:
+                        break
+                    cc = compressor.compress(chunk)
+                    if cc:
+                        f_out.write(encryptor.update(cc))
                     processed_bytes += len(chunk)
-                    if pbar: pbar.update(len(chunk))
+                    if pbar:
+                        pbar.update(len(chunk))
                     if progress_callback and total_size >= 1048576:
-                        progress = int((processed_bytes / total_size) * 100)
-                        if progress > last_progress:
-                            progress_callback(progress)
-                            last_progress = progress
-                remaining_compressed = compressor.flush()
-                if remaining_compressed: f_out.write(encryptor.update(remaining_compressed))
+                        p = int((processed_bytes / total_size) * 100)
+                        if p > last_progress:
+                            progress_callback(p)
+                            last_progress = p
+                rc = compressor.flush()
+                if rc:
+                    f_out.write(encryptor.update(rc))
                 f_out.write(encryptor.finalize())
                 f_out.write(encryptor.tag)
                 f_out.flush()
                 os.fsync(f_out.fileno())
-
-            if pbar: pbar.close()
-            logging.info(f"Successfully encrypted {input_path} to {output_path}")
-            if status_signal: status_signal.emit(f"Encrypted: {os.path.basename(input_path)}")
+            if pbar:
+                pbar.close()
+            logging.info(f"Encrypted: {input_path} -> {output_path}")
+            if status_signal:
+                status_signal.emit(f"✓ Encrypted: {os.path.basename(input_path)}")
             return True
         except Exception as e:
-            self._cleanup_partial_file(output_path)
-            error_msg = f"Encryption failed for {os.path.basename(input_path)}: {e}"
-            logging.error(error_msg + f"\n{traceback.format_exc()}")
-            if status_signal: status_signal.emit(error_msg)
-            if cli_mode: print(f"ERROR: {error_msg}")
+            self._cleanup(output_path)
+            msg = f"Encryption failed for {os.path.basename(input_path)}: {e}"
+            logging.error(msg + f"\n{traceback.format_exc()}")
+            if status_signal:
+                status_signal.emit(f"✗ {msg}")
+            if cli_mode:
+                print(f"ERROR: {msg}")
             return False
 
     def decrypt_file(self, input_path: str, output_dir: str, password: str,
                      key_file: Optional[str] = None,
-                     progress_callback: Optional[Callable[[int], None]] = None,
-                     status_signal: Optional[pyqtSignal] = None,
+                     progress_callback=None, status_signal=None,
                      cancel_flag: Optional[List[bool]] = None,
                      cli_mode: bool = False) -> bool:
         output_path = None
-        max_retries = 3
-        retry_delay = 0.1  # seconds
-        for attempt in range(max_retries):
+        for attempt in range(3):
             try:
                 file_size = os.path.getsize(input_path)
-                logging.info(f"Attempt {attempt + 1}/{max_retries} to decrypt {input_path}, file size: {file_size} bytes")
                 if file_size < MAGIC_SIZE:
-                    raise ValueError("File is too short to be a valid encrypted file.")
+                    raise ValueError("File too short.")
                 with open(input_path, 'rb') as f_in:
-                    # Check magic number first
                     magic = f_in.read(MAGIC_SIZE)
-                    logging.info(f"File {input_path} has magic number: {magic!r}")
                     if magic in INVALID_MAGIC_NUMBERS:
-                        raise ValueError(f"Invalid file format: magic number {magic!r} is not supported.")
+                        raise ValueError(f"Unsupported format: {magic!r}")
                     if magic != MAGIC_NUMBER:
-                        logging.info(f"Attempting legacy format decryption for {input_path}")
-                        expected_legacy_size = SALT_SIZE + NONCE_SIZE + TAG_SIZE + 1
-                        if file_size < expected_legacy_size:
-                            raise ValueError(f"Invalid file format: file is too short for legacy decryption (got {file_size} bytes, expected at least {expected_legacy_size}).")
+                        # Legacy format
+                        exp_legacy = SALT_SIZE + NONCE_SIZE + TAG_SIZE + 1
+                        if file_size < exp_legacy:
+                            raise ValueError("File too short for legacy decryption.")
                         f_in.seek(0)
                         salt = f_in.read(SALT_SIZE)
-                        if len(salt) != SALT_SIZE:
-                            raise ValueError(f"Invalid legacy file format: incomplete salt (got {len(salt)} bytes).")
                         nonce = f_in.read(NONCE_SIZE)
-                        if len(nonce) != NONCE_SIZE:
-                            raise ValueError(f"Invalid legacy file format: incomplete nonce (got {len(nonce)} bytes).")
                         remaining_size = file_size - SALT_SIZE - NONCE_SIZE - TAG_SIZE
-                        if remaining_size <= 0:
-                            raise ValueError("Invalid legacy file format: no ciphertext available.")
                         key = self.derive_key(password, salt, key_file)
-                        decryptor = Cipher(algorithms.AES(key), modes.GCM(nonce), backend=self.backend).decryptor()
-                        output_path = os.path.join(output_dir, f"decrypted_{os.path.basename(input_path).replace('.enc', '')}")
+                        decryptor = Cipher(algorithms.AES(key), modes.GCM(nonce),
+                                           backend=self.backend).decryptor()
+                        output_path = os.path.join(output_dir,
+                            f"decrypted_{os.path.basename(input_path).replace('.enc', '')}")
                         with open(output_path, 'wb') as f_out:
-                            ciphertext = f_in.read(remaining_size)
+                            ct = f_in.read(remaining_size)
                             tag = f_in.read(TAG_SIZE)
-                            if len(tag) != TAG_SIZE:
-                                raise ValueError(f"Invalid legacy file format: tag is {len(tag)} bytes, expected {TAG_SIZE}.")
-                            try:
-                                decrypted_data = decryptor.update(ciphertext) + decryptor.finalize_with_tag(tag)
-                            except InvalidTag as e:
-                                raise ValueError(f"Legacy decryption failed: invalid tag, possibly wrong password or corrupted file.") from e
-                            try:
-                                decompressed_data = zlib.decompress(decrypted_data)
-                            except zlib.error as ze:
-                                logging.error(f"Legacy decompression failed for {input_path}: {ze}")
-                                raise ValueError(f"Legacy decompression failed: {ze}")
-                            f_out.write(decompressed_data)
+                            decrypted = decryptor.update(ct) + decryptor.finalize_with_tag(tag)
+                            f_out.write(zlib.decompress(decrypted))
                             f_out.flush()
                             os.fsync(f_out.fileno())
-                        logging.info(f"Successfully decrypted legacy {input_path} to {output_path}")
-                        if status_signal: status_signal.emit(f"Decrypted (legacy): {os.path.basename(output_path)}")
+                        if status_signal:
+                            status_signal.emit(f"✓ Decrypted (legacy): {os.path.basename(output_path)}")
                         return True
-
-                    # New format decryption
-                    expected_min_size = MAGIC_SIZE + SALT_SIZE + NONCE_SIZE + HEADER_LEN_SIZE + TAG_SIZE + 1
-                    if file_size < expected_min_size:
-                        raise ValueError(f"Invalid new format file: file is too short (got {file_size} bytes, expected at least {expected_min_size}).")
-                    
+                    # New format
                     salt = f_in.read(SALT_SIZE)
                     nonce = f_in.read(NONCE_SIZE)
                     header_len_bytes = f_in.read(HEADER_LEN_SIZE)
-                    if len(salt) != SALT_SIZE or len(nonce) != NONCE_SIZE or len(header_len_bytes) != HEADER_LEN_SIZE:
-                        raise ValueError(f"Invalid new format file: incomplete header components (salt: {len(salt)}, nonce: {len(nonce)}, header_len: {len(header_len_bytes)}).")
-                    
                     header_len = int.from_bytes(header_len_bytes, 'big')
-                    logging.info(f"Header length: {header_len} bytes")
-                    if file_size < MAGIC_SIZE + SALT_SIZE + NONCE_SIZE + HEADER_LEN_SIZE + header_len + TAG_SIZE:
-                        raise ValueError(f"Invalid new format file: insufficient size for header and tag (got {file_size} bytes, expected at least {MAGIC_SIZE + SALT_SIZE + NONCE_SIZE + HEADER_LEN_SIZE + header_len + TAG_SIZE}).")
-                    
                     key = self.derive_key(password, salt, key_file)
-                    decryptor = Cipher(algorithms.AES(key), modes.GCM(nonce), backend=self.backend).decryptor()
+                    decryptor = Cipher(algorithms.AES(key), modes.GCM(nonce),
+                                       backend=self.backend).decryptor()
                     encrypted_header = f_in.read(header_len)
-                    total_size = file_size - (MAGIC_SIZE + SALT_SIZE + NONCE_SIZE + HEADER_LEN_SIZE + header_len + TAG_SIZE)
-                    logging.info(f"Ciphertext size: {total_size} bytes")
-                    processed_bytes = 0
-                    last_progress = -1
-                    pbar = tqdm(total=total_size, unit="B", unit_scale=True, desc=f"Decrypting {os.path.basename(input_path)}", leave=False) if cli_mode else None
-                    output_path = None
-
-                    # Read the entire ciphertext and tag
+                    total_size = file_size - (MAGIC_SIZE + SALT_SIZE + NONCE_SIZE +
+                                              HEADER_LEN_SIZE + header_len + TAG_SIZE)
                     ciphertext = f_in.read(total_size)
                     tag = f_in.read(TAG_SIZE)
-                    if len(tag) != TAG_SIZE:
-                        raise ValueError(f"Invalid new format file: tag is {len(tag)} bytes, expected {TAG_SIZE}.")
-
-                    # Decrypt header and ciphertext together
                     try:
-                        decrypted_data = decryptor.update(encrypted_header + ciphertext) + decryptor.finalize_with_tag(tag)
+                        decrypted_data = (decryptor.update(encrypted_header + ciphertext) +
+                                          decryptor.finalize_with_tag(tag))
                     except InvalidTag as e:
-                        logging.error(f"Decryption attempt {attempt + 1} failed with InvalidTag: {e}")
-                        if attempt < max_retries - 1:
-                            logging.info(f"Retrying decryption after {retry_delay} seconds...")
-                            time.sleep(retry_delay)
+                        if attempt < 2:
+                            time.sleep(0.1)
                             continue
-                        raise ValueError(f"Decryption failed after {max_retries} attempts: invalid tag, possibly wrong password or corrupted file.") from e
-
-                    # Extract header and ciphertext
+                        raise ValueError("Wrong password or corrupted file.") from e
                     header_json = decrypted_data[:header_len]
-                    decrypted_ciphertext = decrypted_data[header_len:]
-                    
+                    decrypted_ct = decrypted_data[header_len:]
                     try:
                         metadata = json.loads(header_json.decode('utf-8'))
-                    except (UnicodeDecodeError, json.JSONDecodeError) as e:
-                        raise ValueError(f"Decryption failed: Incorrect password or corrupted file. Original error: {str(e)}")
-                    
-                    original_filename = metadata.get('original_filename', os.path.basename(input_path).replace('.enc', ''))
+                    except Exception as e:
+                        raise ValueError(f"Corrupted header: {e}")
+                    original_filename = metadata.get('original_filename',
+                        os.path.basename(input_path).replace('.enc', ''))
                     output_path = os.path.join(output_dir, original_filename)
-                    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-
+                    os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
                     with open(output_path, 'wb') as f_out:
-                        decompressor = zlib.decompressobj()
-                        decompressed_chunk = decompressor.decompress(decrypted_ciphertext)
-                        if decompressed_chunk:
-                            f_out.write(decompressed_chunk)
-                        remaining_decompressed = decompressor.flush()
-                        if remaining_decompressed:
-                            f_out.write(remaining_decompressed)
+                        dec = zlib.decompressobj()
+                        chunk = dec.decompress(decrypted_ct)
+                        if chunk:
+                            f_out.write(chunk)
+                        rest = dec.flush()
+                        if rest:
+                            f_out.write(rest)
                         f_out.flush()
                         os.fsync(f_out.fileno())
-
-                    if pbar:
-                        pbar.update(total_size)
-                        pbar.close()
-
+                    # Integrity
                     digest = hashes.Hash(hashes.SHA256(), backend=self.backend)
-                    with open(output_path, 'rb') as f_out:
-                        while chunk := f_out.read(CHUNK_SIZE):
+                    with open(output_path, 'rb') as chk:
+                        while chunk := chk.read(CHUNK_SIZE):
                             digest.update(chunk)
-                    calculated_sha256 = digest.finalize().hex()
-                    if calculated_sha256 != metadata.get('sha256'):
-                        logging.warning(f"SHA256 mismatch for {output_path}: expected {metadata.get('sha256')}, got {calculated_sha256}")
-                        self._cleanup_partial_file(output_path)
-                        raise ValueError("Decryption failed: SHA256 checksum does not match.")
-                    
-                    logging.info(f"Successfully decrypted {input_path} to {output_path}")
-                    if status_signal: status_signal.emit(f"Decrypted: {os.path.basename(output_path)}")
+                    if digest.finalize().hex() != metadata.get('sha256'):
+                        self._cleanup(output_path)
+                        raise ValueError("SHA-256 checksum mismatch.")
+                    logging.info(f"Decrypted: {input_path} -> {output_path}")
+                    if status_signal:
+                        status_signal.emit(f"✓ Decrypted: {os.path.basename(output_path)}")
                     return True
             except Exception as e:
                 if output_path:
-                    self._cleanup_partial_file(output_path)
-                error_msg = f"Decryption failed for {os.path.basename(input_path)}: {e}"
-                logging.error(error_msg + f"\n{traceback.format_exc()}")
-                if status_signal: status_signal.emit(error_msg)
-                if cli_mode: print(f"ERROR: {error_msg}")
+                    self._cleanup(output_path)
+                msg = f"Decryption failed for {os.path.basename(input_path)}: {e}"
+                logging.error(msg + f"\n{traceback.format_exc()}")
+                if status_signal:
+                    status_signal.emit(f"✗ {msg}")
+                if cli_mode:
+                    print(f"ERROR: {msg}")
                 return False
+        return False
 
+
+# ─────────────────────────────────────────────────────────
+#  WORKER THREAD
+# ─────────────────────────────────────────────────────────
 class WorkerThread(QThread):
     progress = pyqtSignal(int)
     status = pyqtSignal(str)
-    finished = pyqtSignal()
+    finished = pyqtSignal(int, int)
 
-    def __init__(self, crypto: CryptoEngine, operation: str, input_paths: List[str], output_dir: str,
-                 password: str, key_file: Optional[str], shred: bool):
+    def __init__(self, crypto, operation, input_paths, output_dir, password, key_file, shred):
         super().__init__()
         self.crypto = crypto
         self.operation = operation
@@ -363,262 +504,770 @@ class WorkerThread(QThread):
         self.cancel_flag = [False]
 
     def run(self):
-        for input_path in self.input_paths:
-            if self.cancel_flag[0]: break
-            base_path = os.path.dirname(input_path)
-            rel_path = os.path.relpath(input_path, base_path) if os.path.isdir(input_path) else os.path.basename(input_path)
-            output_path = os.path.join(self.output_dir, rel_path + ('.enc' if self.operation == 'encrypt' else ''))
+        success = 0
+        total = len(self.input_paths)
+        for i, input_path in enumerate(self.input_paths):
+            if self.cancel_flag[0]:
+                break
+            rel_path = os.path.basename(input_path)
+            output_path = os.path.join(self.output_dir,
+                rel_path + ('.enc' if self.operation == 'encrypt' else ''))
             if self.operation == 'encrypt':
-                success = self.crypto.encrypt_file(
+                ok = self.crypto.encrypt_file(
                     input_path, output_path, self.password, self.key_file,
-                    progress_callback=self.progress.emit, status_signal=self.status, cancel_flag=self.cancel_flag)
-                if success and self.shred:
+                    progress_callback=self.progress.emit,
+                    status_signal=self.status,
+                    cancel_flag=self.cancel_flag)
+                if ok and self.shred:
                     self.crypto.shred_file(input_path)
             else:
-                success = self.crypto.decrypt_file(
+                ok = self.crypto.decrypt_file(
                     input_path, self.output_dir, self.password, self.key_file,
-                    progress_callback=self.progress.emit, status_signal=self.status, cancel_flag=self.cancel_flag)
-        self.finished.emit()
+                    progress_callback=self.progress.emit,
+                    status_signal=self.status,
+                    cancel_flag=self.cancel_flag)
+            if ok:
+                success += 1
+            self.progress.emit(int((i + 1) / total * 100))
+        self.finished.emit(success, total)
 
+
+# ─────────────────────────────────────────────────────────
+#  DROP ZONE LIST
+# ─────────────────────────────────────────────────────────
+class DropZoneList(QListWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+        self.setMinimumHeight(130)
+        self.hint = QLabel("Drop files or folders here, or use the buttons below", self)
+        self.hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.hint.setStyleSheet(
+            f"color:{C['text_xdim']};font-size:12px;background:transparent;border:none;")
+        self._update_hint()
+
+    def _position_hint(self):
+        self.hint.setGeometry(0, 0, self.width(), self.height())
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self._position_hint()
+
+    def _update_hint(self):
+        self.hint.setVisible(self.count() == 0)
+
+    def addItem(self, item):
+        super().addItem(item)
+        self._update_hint()
+
+    def takeItem(self, row):
+        item = super().takeItem(row)
+        self._update_hint()
+        return item
+
+    def clear(self):
+        super().clear()
+        self._update_hint()
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event: QDropEvent):
+        for url in event.mimeData().urls():
+            path = url.toLocalFile()
+            if os.path.exists(path):
+                self.addItem(path)
+
+
+# ─────────────────────────────────────────────────────────
+#  HEADER BANNER
+# ─────────────────────────────────────────────────────────
+class HeaderBanner(QWidget):
+    def __init__(self, license_info: dict, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(62)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(20, 0, 20, 0)
+
+        logo = QLabel("<b>⚿ CryptKey</b>")
+        logo.setStyleSheet(f"font-size:19px;color:{C['accent']};letter-spacing:1px;")
+        logo.setTextFormat(Qt.TextFormat.RichText)
+        layout.addWidget(logo)
+
+        ver = QLabel("v2.1")
+        ver.setStyleSheet(f"font-size:11px;color:{C['text_xdim']};margin-left:4px;margin-top:7px;")
+        layout.addWidget(ver)
+
+        layout.addStretch()
+
+        self.tier_badge = QLabel()
+        self._update_badge(license_info)
+        layout.addWidget(self.tier_badge)
+
+    def _update_badge(self, info: dict):
+        tier = info.get("tier", "free")
+        caps = LICENSE_TIERS.get(tier, LICENSE_TIERS["free"])
+        label = caps["label"].upper()
+        if info.get("valid") and tier != "free":
+            bg, fg = C['accent'], "#000"
+        elif tier == "free":
+            bg, fg = C['surface2'], C['text_dim']
+        else:
+            bg, fg = C['red'], "#fff"
+        self.tier_badge.setText(f"  {label}  ")
+        self.tier_badge.setStyleSheet(
+            f"background:{bg};color:{fg};border-radius:10px;"
+            f"font-size:10px;font-weight:700;letter-spacing:1px;padding:3px 8px;")
+
+    def refresh(self, info: dict):
+        self._update_badge(info)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        grad = QLinearGradient(0, 0, self.width(), 0)
+        grad.setColorAt(0, QColor(C['surface']))
+        grad.setColorAt(1, QColor(C['bg']))
+        painter.fillRect(self.rect(), QBrush(grad))
+        painter.setPen(QPen(QColor(C['border']), 1))
+        painter.drawLine(0, self.height() - 1, self.width(), self.height() - 1)
+
+
+# ─────────────────────────────────────────────────────────
+#  MAIN WINDOW
+# ─────────────────────────────────────────────────────────
 class FileEncryptor(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("CryptKey 1.6.0 - Secure File Encryptor")
-        self.setGeometry(100, 100, 800, 600)
         self.crypto = CryptoEngine()
         self.cancel_flag = [False]
-        self.init_ui()
-        self.load_settings()
-        svg_data = base64.b64decode(ICON_SVG_B64)
-        image = QImage.fromData(svg_data)
-        self.setWindowIcon(QIcon(QPixmap.fromImage(image)))
+        self.thread = None
 
-    def init_ui(self):
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        main_layout = QVBoxLayout(central_widget)
+        self._license_info = validate_license_key(LicenseStore.load())
+        self._license_caps = LICENSE_TIERS.get(
+            self._license_info.get("tier", "free"), LICENSE_TIERS["free"])
 
-        # Create tab widget
-        self.tabs = QTabWidget()
-        main_layout.addWidget(self.tabs)
+        self.setWindowTitle("CryptKey 2.1 – Secure File Encryptor")
+        self.setMinimumSize(820, 660)
+        self.resize(920, 700)
 
-        # Main tab
-        main_tab = QWidget()
-        main_layout_tab = QVBoxLayout(main_tab)
+        self._init_ui()
+        self._load_settings()
+        self._apply_license_ui()
 
-        # File selection
-        file_group = QGroupBox("Files")
-        file_layout = QVBoxLayout(file_group)
-        self.file_list = QListWidget()
-        self.file_list.setAcceptDrops(True)
+    def _init_ui(self):
+        root = QWidget()
+        self.setCentralWidget(root)
+        root_layout = QVBoxLayout(root)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
+
+        # Header
+        self.header = HeaderBanner(self._license_info)
+        root_layout.addWidget(self.header)
+
+        # Body
+        body = QWidget()
+        body_layout = QHBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(0)
+
+        # Sidebar
+        sidebar = QWidget()
+        sidebar.setFixedWidth(190)
+        sidebar.setStyleSheet(
+            f"background:{C['surface']};border-right:1px solid {C['border']};")
+        sb_layout = QVBoxLayout(sidebar)
+        sb_layout.setContentsMargins(10, 16, 10, 16)
+        sb_layout.setSpacing(4)
+
+        self._nav_btns: Dict[str, QPushButton] = {}
+        nav_items = [
+            ("🔒  Encrypt / Decrypt", "main"),
+            ("📋  Activity Log",      "logs"),
+            ("⚿  License",           "license"),
+            ("ℹ  About",             "about"),
+        ]
+        for label, key in nav_items:
+            btn = QPushButton(label)
+            btn.setCheckable(True)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    text-align:left; padding:10px 14px; border:none;
+                    border-radius:6px; background:transparent;
+                    color:{C['text_dim']}; font-size:13px; font-weight:500;
+                }}
+                QPushButton:checked {{
+                    background:rgba(0,229,255,0.10); color:{C['accent']};
+                    border-left:3px solid {C['accent']};
+                }}
+                QPushButton:hover:!checked {{
+                    background:{C['border']}; color:{C['text']};
+                }}
+            """)
+            btn.clicked.connect(lambda _, k=key: self._switch_page(k))
+            sb_layout.addWidget(btn)
+            self._nav_btns[key] = btn
+
+        sb_layout.addStretch()
+
+        lic_quick = QPushButton("⚿  Manage License")
+        lic_quick.setStyleSheet(f"""
+            QPushButton {{
+                text-align:left; padding:9px 14px; border-radius:6px;
+                border:1px solid {C['border']}; background:{C['surface2']};
+                color:{C['text_dim']}; font-size:12px;
+            }}
+            QPushButton:hover {{ color:{C['accent']}; border-color:{C['accent_dim']}; }}
+        """)
+        lic_quick.clicked.connect(lambda: self._switch_page("license"))
+        sb_layout.addWidget(lic_quick)
+
+        body_layout.addWidget(sidebar)
+
+        # Pages
+        self.stack = QStackedWidget()
+        self.stack.setStyleSheet(f"background:{C['bg']};")
+        body_layout.addWidget(self.stack)
+
+        self.stack.addWidget(self._build_main_page())    # 0
+        self.stack.addWidget(self._build_logs_page())    # 1
+        self.stack.addWidget(self._build_license_page()) # 2
+        self.stack.addWidget(self._build_about_page())   # 3
+        self._page_index = {"main": 0, "logs": 1, "license": 2, "about": 3}
+
+        root_layout.addWidget(body)
+
+        # Status bar
+        self.status_bar = QLabel("  Ready")
+        self.status_bar.setFixedHeight(26)
+        self.status_bar.setStyleSheet(
+            f"background:{C['surface']};color:{C['text_dim']};"
+            f"font-size:11px;border-top:1px solid {C['border']};padding-left:12px;")
+        root_layout.addWidget(self.status_bar)
+
+        self._switch_page("main")
+
+    # ── Page builders ──────────────────────────────────────
+
+    def _build_main_page(self) -> QWidget:
+        page = QWidget()
+        lay = QVBoxLayout(page)
+        lay.setContentsMargins(24, 20, 24, 20)
+        lay.setSpacing(14)
+
+        # Files
+        file_grp = QGroupBox("FILES")
+        fl = QVBoxLayout(file_grp)
+        fl.setSpacing(8)
+        self.file_list = DropZoneList()
         self.file_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.file_list.customContextMenuRequested.connect(self.show_context_menu)
-        self.file_list.setMinimumHeight(100)
-        file_layout.addWidget(self.file_list)
-        file_buttons = QHBoxLayout()
-        self.add_files_btn = QPushButton("Add Files")
-        self.add_files_btn.clicked.connect(self.add_files)
-        self.add_folder_btn = QPushButton("Add Folder")
-        self.add_folder_btn.clicked.connect(self.add_folder)
-        self.clear_btn = QPushButton("Clear")
-        self.clear_btn.clicked.connect(self.file_list.clear)
-        file_buttons.addWidget(self.add_files_btn)
-        file_buttons.addWidget(self.add_folder_btn)
-        file_buttons.addWidget(self.clear_btn)
-        file_layout.addLayout(file_buttons)
-        main_layout_tab.addWidget(file_group)
+        self.file_list.customContextMenuRequested.connect(self._ctx_menu)
+        fl.addWidget(self.file_list)
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        for label, slot in [("＋ Add Files", self._add_files), ("📁 Add Folder", self._add_folder)]:
+            b = QPushButton(label)
+            b.clicked.connect(slot)
+            btn_row.addWidget(b)
+        btn_row.addStretch()
+        clr = QPushButton("✕ Clear")
+        clr.setObjectName("danger")
+        clr.clicked.connect(self.file_list.clear)
+        btn_row.addWidget(clr)
+        fl.addLayout(btn_row)
+        lay.addWidget(file_grp)
 
-        # Output directory
-        output_group = QGroupBox("Output Directory")
-        output_layout = QHBoxLayout(output_group)
+        # Two-column options
+        cols = QHBoxLayout()
+        cols.setSpacing(14)
+
+        left = QVBoxLayout()
+        left.setSpacing(14)
+        out_grp = QGroupBox("OUTPUT DIRECTORY")
+        ol = QHBoxLayout(out_grp)
+        ol.setSpacing(8)
         self.output_dir_edit = QLineEdit()
-        self.output_dir_btn = QPushButton("Browse")
-        self.output_dir_btn.clicked.connect(self.browse_output_dir)
-        output_layout.addWidget(QLabel("Output:"))
-        output_layout.addWidget(self.output_dir_edit)
-        output_layout.addWidget(self.output_dir_btn)
-        main_layout_tab.addWidget(output_group)
+        self.output_dir_edit.setPlaceholderText("Choose output directory…")
+        ob = QPushButton("Browse")
+        ob.setFixedWidth(80)
+        ob.clicked.connect(self._browse_output)
+        ol.addWidget(self.output_dir_edit)
+        ol.addWidget(ob)
+        left.addWidget(out_grp)
 
-        # Password
-        password_group = QGroupBox("Password")
-        password_layout = QVBoxLayout(password_group)
+        key_grp = QGroupBox("KEY FILE  (optional)")
+        kl = QHBoxLayout(key_grp)
+        kl.setSpacing(8)
+        self.key_file_edit = QLineEdit()
+        self.key_file_edit.setPlaceholderText("No key file selected")
+        kb = QPushButton("Browse")
+        kb.setFixedWidth(80)
+        kb.clicked.connect(self._browse_key)
+        kl.addWidget(self.key_file_edit)
+        kl.addWidget(kb)
+        left.addWidget(key_grp)
+        cols.addLayout(left, 3)
+
+        right = QVBoxLayout()
+        right.setSpacing(14)
+        pw_grp = QGroupBox("PASSWORD")
+        pl = QVBoxLayout(pw_grp)
+        pl.setSpacing(6)
         self.password_edit = QLineEdit()
         self.password_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.password_edit.textChanged.connect(self.update_password_strength)
-        password_layout.addWidget(QLabel("Password:"))
-        password_layout.addWidget(self.password_edit)
-        self.strength_label = QLabel("Password Strength: N/A")
-        password_layout.addWidget(self.strength_label)
-        main_layout_tab.addWidget(password_group)
+        self.password_edit.setPlaceholderText("Enter password…")
+        self.password_edit.textChanged.connect(self._update_strength)
+        pl.addWidget(self.password_edit)
+        self.strength_bar = QProgressBar()
+        self.strength_bar.setRange(0, 4)
+        self.strength_bar.setValue(0)
+        self.strength_bar.setFixedHeight(5)
+        self.strength_bar.setTextVisible(False)
+        pl.addWidget(self.strength_bar)
+        self.strength_label = QLabel("Enter a password")
+        self.strength_label.setStyleSheet(f"color:{C['text_xdim']};font-size:11px;")
+        pl.addWidget(self.strength_label)
+        right.addWidget(pw_grp)
 
-        # Key file
-        key_group = QGroupBox("Key File (Optional)")
-        key_layout = QHBoxLayout(key_group)
-        self.key_file_edit = QLineEdit()
-        self.key_file_btn = QPushButton("Browse")
-        self.key_file_btn.clicked.connect(self.browse_key_file)
-        key_layout.addWidget(QLabel("Key File:"))
-        key_layout.addWidget(self.key_file_edit)
-        key_layout.addWidget(self.key_file_btn)
-        main_layout_tab.addWidget(key_group)
-
-        # Operation selection
-        operation_group = QGroupBox("Operation")
-        operation_layout = QHBoxLayout(operation_group)
-        self.encrypt_radio = QRadioButton("Encrypt")
-        self.decrypt_radio = QRadioButton("Decrypt")
+        op_grp = QGroupBox("OPERATION")
+        opl = QHBoxLayout(op_grp)
+        opl.setSpacing(16)
+        self.encrypt_radio = QRadioButton("🔒  Encrypt")
+        self.decrypt_radio = QRadioButton("🔓  Decrypt")
         self.encrypt_radio.setChecked(True)
-        operation_layout.addWidget(self.encrypt_radio)
-        operation_layout.addWidget(self.decrypt_radio)
-        main_layout_tab.addWidget(operation_group)
+        opl.addWidget(self.encrypt_radio)
+        opl.addWidget(self.decrypt_radio)
+        opl.addStretch()
+        right.addWidget(op_grp)
+        cols.addLayout(right, 2)
+        lay.addLayout(cols)
 
-        # Shred option
-        self.shred_check = QCheckBox("Shred original files after encryption")
-        main_layout_tab.addWidget(self.shred_check)
+        self.shred_check = QCheckBox("🗑  Securely shred originals after encryption")
+        lay.addWidget(self.shred_check)
 
-        # Progress and status
         self.progress_bar = QProgressBar()
         self.progress_bar.setValue(0)
-        main_layout_tab.addWidget(self.progress_bar)
-        self.status_label = QLabel("Ready")
-        main_layout_tab.addWidget(self.status_label)
+        self.progress_bar.setFixedHeight(8)
+        self.progress_bar.setTextVisible(False)
+        lay.addWidget(self.progress_bar)
 
-        # Action buttons
-        action_layout = QHBoxLayout()
-        self.start_btn = QPushButton("Start")
-        self.start_btn.clicked.connect(self.start_operation)
-        self.cancel_btn = QPushButton("Cancel")
-        self.cancel_btn.clicked.connect(self.cancel_operation)
+        self.op_status_label = QLabel("Ready")
+        self.op_status_label.setStyleSheet(f"color:{C['text_dim']};font-size:12px;")
+        lay.addWidget(self.op_status_label)
+
+        act = QHBoxLayout()
+        act.setSpacing(10)
+        self.start_btn = QPushButton("▶  Start")
+        self.start_btn.setObjectName("primary")
+        self.start_btn.setMinimumHeight(42)
+        self.start_btn.clicked.connect(self._start_operation)
+        self.cancel_btn = QPushButton("✕  Cancel")
+        self.cancel_btn.setObjectName("danger")
+        self.cancel_btn.setMinimumHeight(42)
         self.cancel_btn.setEnabled(False)
-        action_layout.addWidget(self.start_btn)
-        action_layout.addWidget(self.cancel_btn)
-        main_layout_tab.addLayout(action_layout)
-        main_layout_tab.addStretch()
+        self.cancel_btn.clicked.connect(self._cancel_operation)
+        act.addWidget(self.start_btn)
+        act.addWidget(self.cancel_btn)
+        lay.addLayout(act)
+        lay.addStretch()
+        return page
 
-        # Help tab
-        help_tab = QWidget()
-        help_layout = QVBoxLayout(help_tab)
-        help_tabs = QTabWidget()
-        
-        # View Logs subtab
-        logs_widget = QWidget()
-        logs_layout = QVBoxLayout(logs_widget)
-        logs_label = QLabel("Log File Contents:")
-        logs_layout.addWidget(logs_label)
+    def _build_logs_page(self) -> QWidget:
+        page = QWidget()
+        lay = QVBoxLayout(page)
+        lay.setContentsMargins(24, 20, 24, 20)
+        lay.setSpacing(12)
+        hdr = QLabel("Activity Log")
+        hdr.setStyleSheet(f"font-size:17px;font-weight:700;color:{C['text']};")
+        lay.addWidget(hdr)
         self.logs_text = QTextEdit()
         self.logs_text.setReadOnly(True)
-        self.logs_text.setFont(QFont("Courier New", 10))
-        logs_scroll = QScrollArea()
-        logs_scroll.setWidget(self.logs_text)
-        logs_scroll.setWidgetResizable(True)
-        logs_layout.addWidget(logs_scroll)
-        refresh_logs_btn = QPushButton("Refresh Logs")
-        refresh_logs_btn.clicked.connect(self.refresh_logs)
-        logs_layout.addWidget(refresh_logs_btn)
-        help_tabs.addTab(logs_widget, "View Logs")
-        
-        # About subtab
-        about_widget = QWidget()
-        about_layout = QVBoxLayout(about_widget)
-        about_text = QTextEdit()
-        about_text.setReadOnly(True)
-        about_text.setText("""
-        <h2>CryptKey</h2>
-        <p><b>Version:</b> 1.6.0</p>
-        <p><b>Description:</b> A secure yet user-friendly application for encrypting and decrypting files and folders. CryptKey uses AES-256-GCM encryption with Argon2 password derivation, supports legacy file formats, and includes secure shredding of originals.</p>
+        lay.addWidget(self.logs_text)
+        br = QHBoxLayout()
+        rb = QPushButton("↻  Refresh")
+        rb.clicked.connect(self._refresh_logs)
+        cb = QPushButton("✕  Clear View")
+        cb.setObjectName("danger")
+        cb.clicked.connect(self.logs_text.clear)
+        br.addWidget(rb)
+        br.addWidget(cb)
+        br.addStretch()
+        lay.addLayout(br)
+        return page
 
-        <p><b>Author:</b> Leon Priest</p>
-        <p><b>Contact:</b> leonpriest76@gmail.com</p>
-        <p><b>License:</b> MIT License</p>
+    def _build_license_page(self) -> QWidget:
+        page = QWidget()
+        lay = QVBoxLayout(page)
+        lay.setContentsMargins(24, 20, 24, 20)
+        lay.setSpacing(16)
 
+        hdr = QLabel("License & Plan")
+        hdr.setStyleSheet(f"font-size:17px;font-weight:700;color:{C['text']};")
+        lay.addWidget(hdr)
+
+        # Status card
+        card = QWidget()
+        card.setStyleSheet(
+            f"background:{C['surface']};border-radius:10px;border:1px solid {C['border']};")
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(20, 14, 20, 14)
+        self.lic_page_status = QLabel(self._license_info["message"])
+        colour = C['green'] if self._license_info["valid"] else C['yellow']
+        self.lic_page_status.setStyleSheet(
+            f"color:{colour};font-size:14px;font-weight:600;")
+        cl.addWidget(self.lic_page_status)
+        lay.addWidget(card)
+
+        # Tier comparison
+        tiers_grp = QGroupBox("AVAILABLE TIERS")
+        tl = QVBoxLayout(tiers_grp)
+        current_tier = self._license_info.get("tier", "free")
+        for t_key, t_caps in LICENSE_TIERS.items():
+            active = (t_key == current_tier)
+            row = QWidget()
+            row.setStyleSheet(
+                f"background:{'rgba(0,229,255,0.07)' if active else C['surface2']};"
+                f"border-radius:6px;border:1px solid {C['accent'] if active else C['border']};")
+            rl = QHBoxLayout(row)
+            rl.setContentsMargins(14, 10, 14, 10)
+            nl = QLabel(f"<b>{t_caps['label']}</b>")
+            nl.setStyleSheet(f"color:{C['accent'] if active else C['text']};font-size:13px;")
+            nl.setTextFormat(Qt.TextFormat.RichText)
+            max_f = t_caps['max_files']
+            dl = QLabel(
+                f"Files: {'Unlimited' if max_f==-1 else max_f}  ·  "
+                f"Shred: {'✓' if t_caps['shred'] else '✗'}  ·  "
+                f"Batch: {'✓' if t_caps['batch'] else '✗'}")
+            dl.setStyleSheet(f"color:{C['text_dim']};font-size:12px;")
+            rl.addWidget(nl)
+            rl.addWidget(dl)
+            rl.addStretch()
+            if active:
+                badge = QLabel("  CURRENT  ")
+                badge.setStyleSheet(
+                    f"background:{C['accent']};color:#000;border-radius:8px;"
+                    f"font-size:9px;font-weight:700;padding:2px 6px;")
+                rl.addWidget(badge)
+            tl.addWidget(row)
+        lay.addWidget(tiers_grp)
+
+        # Key entry
+        key_grp = QGroupBox("ENTER / UPDATE LICENSE KEY")
+        kl = QVBoxLayout(key_grp)
+        kl.setSpacing(10)
+        self.lic_key_edit = QLineEdit()
+        self.lic_key_edit.setPlaceholderText("Paste your license key here…")
+        kl.addWidget(self.lic_key_edit)
+        kr = QHBoxLayout()
+        ab = QPushButton("Apply License Key")
+        ab.setObjectName("primary")
+        ab.clicked.connect(self._apply_license_page)
+        rb2 = QPushButton("Remove License")
+        rb2.setObjectName("danger")
+        rb2.clicked.connect(self._remove_license)
+        kr.addWidget(ab)
+        kr.addWidget(rb2)
+        kr.addStretch()
+        kl.addLayout(kr)
+        lay.addWidget(key_grp)
+
+        mid = QLabel(
+            f"Your Machine ID: <code style='color:{C['accent']}'>{_machine_id()}</code>"
+            f"  (share with vendor for machine-locked licenses)")
+        mid.setStyleSheet(f"color:{C['text_xdim']};font-size:11px;")
+        mid.setTextFormat(Qt.TextFormat.RichText)
+        lay.addWidget(mid)
+        lay.addStretch()
+        return page
+
+    def _build_about_page(self) -> QWidget:
+        page = QWidget()
+        lay = QVBoxLayout(page)
+        lay.setContentsMargins(24, 20, 24, 20)
+        about = QTextEdit()
+        about.setReadOnly(True)
+        about.setHtml(f"""
+        <style>
+            body {{ color:{C['text']};font-family:'Segoe UI',sans-serif;font-size:13px;line-height:1.6; }}
+            h2 {{ color:{C['accent']};margin-bottom:4px; }}
+            h3 {{ color:{C['text']};margin-top:18px; }}
+            code {{ color:{C['green']};background:{C['surface2']};padding:1px 4px;border-radius:3px; }}
+            a {{ color:{C['accent']}; }}
+            hr {{ border:1px solid {C['border']}; }}
+            li {{ margin-bottom:4px; }}
+            .muted {{ color:{C['text_dim']}; }}
+            td,th {{ padding:3px 10px 3px 0;vertical-align:top; }}
+        </style>
+        <h2>⚿ CryptKey</h2>
+        <p class='muted'><b>Version:</b> 2.1.0 &nbsp;|&nbsp;
+           <b>Encryption:</b> AES-256-GCM &nbsp;|&nbsp;
+           <b>KDF:</b> Argon2id &nbsp;|&nbsp;
+           <b>Licensing:</b> Ed25519</p>
+        <p>Professional-grade desktop encryption for files and directories.
+           Designed for security, reliability, and ease of use.</p>
         <hr>
-
-        <h3>Key Features</h3>
+        <h3>Author</h3>
+        <p><b>Leon Priest</b> &nbsp;—&nbsp;
+           <a href='mailto:leonpriest76@gmail.com'>leonpriest76@gmail.com</a></p>
+        <h3>Licensing</h3>
+        <p>
+            <b>Free:</b> MIT License — personal &amp; evaluation use (up to 10 files).<br>
+            <b>Personal / Commercial:</b> Commercial license required.
+            Contact the author for pricing and volume discounts.
+        </p>
+        <hr>
+        <h3>Cryptographic Design</h3>
         <ul>
-        <li><b>File & Folder Protection:</b> Encrypt entire directories while preserving structure.</li>
-        <li><b>Decryption:</b> Open modern or legacy <code>.enc</code> files seamlessly.</li>
-        <li><b>Key File Support:</b> Optional key files for enhanced security.</li>
-        <li><b>Integrity Verification:</b> SHA-256 hash check to ensure files are uncorrupted.</li>
-        <li><b>Secure Shredding:</b> Safely overwrite and remove originals after encryption.</li>
-        <li><b>Cross-Platform:</b> Works on Windows, Linux, and macOS.</li>
+            <li><b>AES-256-GCM</b> — authenticated encryption (confidentiality + integrity)</li>
+            <li><b>Argon2id</b> — memory-hard KDF (time=4, memory=128 MB, parallelism=8)</li>
+            <li><b>zlib</b> — compression applied before encryption</li>
+            <li><b>SHA-256</b> — plaintext integrity verification on decryption</li>
+            <li><b>Secure shred</b> — 3-pass random overwrite (Personal/Commercial)</li>
         </ul>
-
-        <h3>User Experience</h3>
-        <ul>
-         <li><b>GUI:</b> Drag-and-drop interface, password generator, and real-time password strength feedback.</li>
-        <li><b>CLI:</b> Command-line support for automation and scripting.</li>
-        <li><b>Logging:</b> Detailed logs saved locally for easy troubleshooting.</li>
-        </ul>
-
-        <h3>Notes</h3>
-        <ul>
-        <li>Passwords must meet a minimum strength score for security.</li>
-        <li>Key files (up to 1 KB) should be backed up and used consistently.</li>
-        <li>Legacy files are detected and decrypted automatically.</li>
-        </ul>
+        <h3>File Format (.enc)</h3>
+        <table>
+          <tr style='color:{C['text_dim']};font-size:11px;'>
+            <th>Field</th><th>Size</th><th>Purpose</th></tr>
+          <tr><td><code>MAGIC</code></td><td>4 B</td><td>Format identifier <code>ENC1</code></td></tr>
+          <tr><td><code>SALT</code></td><td>16 B</td><td>Argon2 salt (random per file)</td></tr>
+          <tr><td><code>NONCE</code></td><td>12 B</td><td>AES-GCM IV (random per file)</td></tr>
+          <tr><td><code>HEADER_LEN</code></td><td>4 B</td><td>Encrypted header byte count</td></tr>
+          <tr><td><code>HEADER</code></td><td>variable</td><td>Encrypted JSON (filename + SHA-256)</td></tr>
+          <tr><td><code>CIPHERTEXT</code></td><td>variable</td><td>zlib-compressed + AES-GCM ciphertext</td></tr>
+          <tr><td><code>TAG</code></td><td>16 B</td><td>AES-GCM authentication tag</td></tr>
+        </table>
+        <h3>Log locations</h3>
+        <p>
+            <b>Windows:</b> <code>%APPDATA%\\CryptKey\\cryptkey.log</code><br>
+            <b>Linux/macOS:</b> <code>~/.local/share/CryptKey/cryptkey.log</code>
+        </p>
         """)
-        about_layout.addWidget(about_text)
-        help_tabs.addTab(about_widget, "About")
-        
-        help_layout.addWidget(help_tabs)
-        self.tabs.addTab(main_tab, "Main")
-        self.tabs.addTab(help_tab, "Help")
+        lay.addWidget(about)
+        return page
 
-        self.setAcceptDrops(True)
+    # ── Navigation ────────────────────────────────────────
 
-    def refresh_logs(self):
-        """Load and display the log file contents."""
-        try:
-            log_path = LOG_FILE_PATH or (Path(os.getenv('APPDATA', Path.home())) / "FileEncryptor" / "file_encryptor.log")
-            if os.path.exists(log_path):
-                with open(log_path, 'r', encoding='utf-8') as f:
-                    self.logs_text.setText(f.read())
-            else:
-                self.logs_text.setText("Log file not found.")
-        except Exception as e:
-            self.logs_text.setText(f"Error loading log file: {e}")
+    def _switch_page(self, key: str):
+        for k, btn in self._nav_btns.items():
+            btn.setChecked(k == key)
+        self.stack.setCurrentIndex(self._page_index[key])
+        if key == "logs":
+            self._refresh_logs()
 
-    def show_context_menu(self, position):
-        menu = QMenu()
-        remove_action = menu.addAction("Remove Selected")
-        action = menu.exec(self.file_list.mapToGlobal(position))
-        if action == remove_action:
-            for item in self.file_list.selectedItems():
-                self.file_list.takeItem(self.file_list.row(item))
+    # ── Operations ────────────────────────────────────────
 
-    def add_files(self):
+    def _add_files(self):
         files, _ = QFileDialog.getOpenFileNames(self, "Select Files")
-        for file in files:
-            self.file_list.addItem(file)
+        for f in files:
+            self.file_list.addItem(f)
 
-    def add_folder(self):
+    def _add_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Folder")
         if folder:
             self.file_list.addItem(folder)
 
-    def browse_output_dir(self):
+    def _browse_output(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Output Directory")
         if folder:
             self.output_dir_edit.setText(folder)
 
-    def browse_key_file(self):
+    def _browse_key(self):
         file, _ = QFileDialog.getOpenFileName(self, "Select Key File")
         if file:
             self.key_file_edit.setText(file)
 
-    def update_password_strength(self):
-        password = self.password_edit.text()
-        result = self.crypto.validate_password(password)
+    def _update_strength(self):
+        pw = self.password_edit.text()
+        result = self.crypto.validate_password(pw)
         score = result['score']
-        feedback = result['feedback']
-        strength = ["Very Weak", "Weak", "Fair", "Strong", "Very Strong"]
-        self.strength_label.setText(f"Password Strength: {strength[score] if score >= 0 else 'Invalid'}")
-        if feedback.get('warning'):
-            self.strength_label.setStyleSheet("color: red;")
-        elif score < 3:
-            self.strength_label.setStyleSheet("color: orange;")
+        labels  = ["Very Weak", "Weak", "Fair", "Strong", "Very Strong"]
+        colours = [C['red'], C['red'], C['yellow'], C['green'], C['green']]
+        if score < 0:
+            self.strength_label.setText("Enter a password")
+            self.strength_label.setStyleSheet(f"color:{C['text_xdim']};font-size:11px;")
+            self.strength_bar.setValue(0)
+            return
+        self.strength_bar.setValue(score + 1)
+        colour = colours[score]
+        self.strength_bar.setStyleSheet(
+            f"QProgressBar::chunk {{ background:{colour}; border-radius:5px; }}")
+        text = labels[score]
+        if result['feedback'].get('warning'):
+            text += f" – {result['feedback']['warning']}"
+        self.strength_label.setText(text)
+        self.strength_label.setStyleSheet(f"color:{colour};font-size:11px;")
+
+    def _ctx_menu(self, pos):
+        menu = QMenu()
+        ra = menu.addAction("✕  Remove Selected")
+        action = menu.exec(self.file_list.mapToGlobal(pos))
+        if action == ra:
+            for item in self.file_list.selectedItems():
+                self.file_list.takeItem(self.file_list.row(item))
+
+    def _start_operation(self):
+        if not self.file_list.count():
+            QMessageBox.warning(self, "No Files", "Add at least one file or folder.")
+            return
+        if not self.output_dir_edit.text():
+            QMessageBox.warning(self, "No Output", "Please specify an output directory.")
+            return
+        if not os.path.isdir(self.output_dir_edit.text()):
+            QMessageBox.warning(self, "Invalid Directory", "Output directory does not exist.")
+            return
+        if not self.password_edit.text():
+            QMessageBox.warning(self, "No Password", "Please enter a password.")
+            return
+        pw_result = self.crypto.validate_password(self.password_edit.text())
+        if pw_result['score'] < 3:
+            QMessageBox.warning(self, "Weak Password",
+                "Password must score Strong or better (3+/4).\nPlease choose a stronger password.")
+            return
+
+        # Collect files
+        input_paths = []
+        for i in range(self.file_list.count()):
+            path = self.file_list.item(i).text()
+            if os.path.isdir(path):
+                for root, _, files in os.walk(path):
+                    for file in files:
+                        input_paths.append(os.path.join(root, file))
+            else:
+                input_paths.append(path)
+
+        # License: file limit
+        max_f = self._license_caps['max_files']
+        if max_f != -1 and len(input_paths) > max_f:
+            QMessageBox.warning(self, "License Limit",
+                f"Your {self._license_caps['label']} license allows up to {max_f} files per operation.\n"
+                f"You selected {len(input_paths)} files.\n\nUpgrade to process more files.")
+            return
+
+        # License: shred
+        if self.shred_check.isChecked() and not self._license_caps['shred']:
+            QMessageBox.warning(self, "Feature Locked",
+                "Secure shredding requires a Personal or Commercial license.\n"
+                "Please upgrade or uncheck 'Shred originals'.")
+            return
+
+        operation = 'encrypt' if self.encrypt_radio.isChecked() else 'decrypt'
+        self.cancel_flag = [False]
+        self.thread = WorkerThread(
+            self.crypto, operation, input_paths,
+            self.output_dir_edit.text(), self.password_edit.text(),
+            self.key_file_edit.text() or None,
+            self.shred_check.isChecked())
+        self.thread.cancel_flag = self.cancel_flag
+        self.thread.progress.connect(self.progress_bar.setValue)
+        self.thread.status.connect(self._on_status)
+        self.thread.finished.connect(self._op_finished)
+        self.start_btn.setEnabled(False)
+        self.cancel_btn.setEnabled(True)
+        self.progress_bar.setValue(0)
+        self.thread.start()
+
+    def _on_status(self, msg: str):
+        self.op_status_label.setText(msg)
+        self.status_bar.setText(f"  {msg}")
+
+    def _cancel_operation(self):
+        self.cancel_flag[0] = True
+        self._on_status("Cancelling…")
+        self.cancel_btn.setEnabled(False)
+
+    def _op_finished(self, success: int, total: int):
+        self.cancel_flag[0] = False
+        self.start_btn.setEnabled(True)
+        self.cancel_btn.setEnabled(False)
+        self.progress_bar.setValue(100)
+        msg = f"Done – {success}/{total} files processed successfully."
+        self._on_status(msg)
+        if success < total:
+            QMessageBox.warning(self, "Partial Completion",
+                f"{total - success} file(s) failed. Check the Activity Log for details.")
         else:
-            self.strength_label.setStyleSheet("color: green;")
+            QTimer.singleShot(1500, lambda: self.progress_bar.setValue(0))
+        self._refresh_logs()
+
+    # ── Logs ──────────────────────────────────────────────
+
+    def _refresh_logs(self):
+        try:
+            log_path = LOG_FILE_PATH or (
+                Path(os.getenv('APPDATA', Path.home())) / "CryptKey" / "cryptkey.log")
+            if os.path.exists(str(log_path)):
+                with open(log_path, 'r', encoding='utf-8', errors='replace') as f:
+                    self.logs_text.setPlainText(f.read())
+                self.logs_text.moveCursor(self.logs_text.textCursor().MoveOperation.End)
+            else:
+                self.logs_text.setPlainText("No log file found yet.")
+        except Exception as e:
+            self.logs_text.setPlainText(f"Error loading log: {e}")
+
+    # ── License ───────────────────────────────────────────
+
+    def _apply_license_ui(self):
+        caps = self._license_caps
+        self.header.refresh(self._license_info)
+        if not caps['shred']:
+            self.shred_check.setEnabled(False)
+            self.shred_check.setToolTip(
+                "Upgrade to Personal or Commercial to enable secure shredding.")
+        else:
+            self.shred_check.setEnabled(True)
+            self.shred_check.setToolTip("")
+
+    def _apply_license_page(self):
+        key_str = self.lic_key_edit.text().strip()
+        if not key_str:
+            QMessageBox.warning(self, "No Key", "Please paste a license key.")
+            return
+        info = validate_license_key(key_str)
+        if info["valid"]:
+            LicenseStore.save(key_str)
+        self._on_license_updated(info)
+        colour = C['green'] if info["valid"] else C['red']
+        self.lic_page_status.setText(info["message"])
+        self.lic_page_status.setStyleSheet(
+            f"color:{colour};font-size:14px;font-weight:600;")
+        # Reload page to refresh tier cards
+        idx = self._page_index["license"]
+        old = self.stack.widget(idx)
+        new = self._build_license_page()
+        self.stack.insertWidget(idx, new)
+        self.stack.removeWidget(old)
+        old.deleteLater()
+        self.stack.setCurrentIndex(idx)
+
+    def _remove_license(self):
+        LicenseStore.clear()
+        info = validate_license_key("")
+        self._on_license_updated(info)
+        self.lic_page_status.setText(info["message"])
+        self.lic_page_status.setStyleSheet(
+            f"color:{C['yellow']};font-size:14px;font-weight:600;")
+
+    def _on_license_updated(self, info: dict):
+        self._license_info = info
+        self._license_caps = LICENSE_TIERS.get(
+            info.get("tier", "free"), LICENSE_TIERS["free"])
+        self._apply_license_ui()
+        logging.info(f"License updated: {info['message']}")
+
+    # ── Settings ──────────────────────────────────────────
+
+    def _load_settings(self):
+        s = QSettings("CryptKey", "Settings")
+        self.output_dir_edit.setText(s.value("output_dir", ""))
+        self.key_file_edit.setText(s.value("key_file", ""))
+
+    def closeEvent(self, event):
+        s = QSettings("CryptKey", "Settings")
+        s.setValue("output_dir", self.output_dir_edit.text())
+        s.setValue("key_file", self.key_file_edit.text())
+        event.accept()
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():
@@ -630,67 +1279,17 @@ class FileEncryptor(QMainWindow):
             if os.path.exists(path):
                 self.file_list.addItem(path)
 
-    def start_operation(self):
-        if not self.file_list.count():
-            QMessageBox.warning(self, "Error", "No files or folders selected.")
-            return
-        if not self.output_dir_edit.text():
-            QMessageBox.warning(self, "Error", "Output directory not specified.")
-            return
-        if not os.path.isdir(self.output_dir_edit.text()):
-            QMessageBox.warning(self, "Error", "Output directory does not exist.")
-            return
-        if not self.password_edit.text():
-            QMessageBox.warning(self, "Error", "Password is required.")
-            return
-        input_paths = []
-        for i in range(self.file_list.count()):
-            path = self.file_list.item(i).text()
-            if os.path.isdir(path):
-                for root, _, files in os.walk(path):
-                    for file in files:
-                        input_paths.append(os.path.join(root, file))
-            else:
-                input_paths.append(path)
-        
-        operation = 'encrypt' if self.encrypt_radio.isChecked() else 'decrypt'
-        self.thread = WorkerThread(
-            self.crypto, operation, input_paths, self.output_dir_edit.text(),
-            self.password_edit.text(), self.key_file_edit.text() or None, self.shred_check.isChecked())
-        self.thread.progress.connect(self.progress_bar.setValue)
-        self.thread.status.connect(self.status_label.setText)
-        self.thread.finished.connect(self.operation_finished)
-        self.start_btn.setEnabled(False)
-        self.cancel_btn.setEnabled(True)
-        self.thread.start()
 
-    def cancel_operation(self):
-        self.cancel_flag[0] = True
-        self.status_label.setText("Cancelling...")
-        self.cancel_btn.setEnabled(False)
-
-    def operation_finished(self):
-        self.cancel_flag[0] = False
-        self.start_btn.setEnabled(True)
-        self.cancel_btn.setEnabled(False)
-        self.progress_bar.setValue(0)
-        self.status_label.setText("Operation completed.")
-        self.refresh_logs()
-
-    def load_settings(self):
-        settings = QSettings("FileEncryptor", "Settings")
-        self.output_dir_edit.setText(settings.value("output_dir", ""))
-        self.key_file_edit.setText(settings.value("key_file", ""))
-
-    def closeEvent(self, event):
-        settings = QSettings("FileEncryptor", "Settings")
-        settings.setValue("output_dir", self.output_dir_edit.text())
-        settings.setValue("key_file", self.key_file_edit.text())
-        event.accept()
-
+# ─────────────────────────────────────────────────────────
+#  CLI
+# ─────────────────────────────────────────────────────────
 def run_cli(args):
+    lic = validate_license_key(LicenseStore.load())
+    caps = LICENSE_TIERS.get(lic.get("tier", "free"), LICENSE_TIERS["free"])
+    if not lic["valid"] and lic.get("tier") not in (None, "free"):
+        print(f"License warning: {lic['message']}")
+
     crypto = CryptoEngine()
-    success_count = 0
     files_to_process = []
     for path in args.input_paths:
         if not os.path.exists(path):
@@ -702,62 +1301,85 @@ def run_cli(args):
                     files_to_process.append(os.path.join(root, file))
         else:
             files_to_process.append(path)
-    
-    password = args.password or getpass.getpass("Enter password: ")
-    for input_file in files_to_process:
-        rel_path = os.path.relpath(input_file, os.path.dirname(input_file))
-        output_path = os.path.join(args.output_dir, rel_path + ('.enc' if not args.decrypt else ''))
-        if args.decrypt:
-            success = crypto.decrypt_file(input_file, args.output_dir, password, key_file=args.key_file, cli_mode=True)
-        else:
-            success = crypto.encrypt_file(input_file, output_path, password, key_file=args.key_file, cli_mode=True)
-            if success and args.shred:
-                crypto.shred_file(input_file)
-        if success:
-            success_count += 1
-    
-    print(f"\nOperation complete. {success_count}/{len(files_to_process)} files processed successfully.")
 
+    max_f = caps['max_files']
+    if max_f != -1 and len(files_to_process) > max_f:
+        print(f"ERROR: {caps['label']} license allows up to {max_f} files per operation.")
+        sys.exit(1)
+
+    password = args.password or getpass.getpass("Enter password: ")
+    success_count = 0
+    for input_file in files_to_process:
+        rel_path = os.path.basename(input_file)
+        output_path = os.path.join(args.output_dir,
+                                   rel_path + ('.enc' if not args.decrypt else ''))
+        if args.decrypt:
+            ok = crypto.decrypt_file(input_file, args.output_dir, password,
+                                     key_file=args.key_file, cli_mode=True)
+        else:
+            ok = crypto.encrypt_file(input_file, output_path, password,
+                                     key_file=args.key_file, cli_mode=True)
+            if ok and args.shred:
+                if not caps['shred']:
+                    print("WARNING: Shredding requires Personal/Commercial license – skipped.")
+                else:
+                    crypto.shred_file(input_file)
+        if ok:
+            success_count += 1
+
+    print(f"\nDone. {success_count}/{len(files_to_process)} files processed successfully.")
+
+
+# ─────────────────────────────────────────────────────────
+#  ENTRY POINT
+# ─────────────────────────────────────────────────────────
 def main():
     setup_logging()
     try:
-        parser = argparse.ArgumentParser(description="Secure File and Directory Encryptor.")
-        parser.add_argument('input_paths', nargs='*', help="Input files or directories.")
-        parser.add_argument('--cli', action='store_true', help="Run in command-line mode.")
-        parser.add_argument('-d', '--decrypt', action='store_true', help="Decrypt files.")
-        parser.add_argument('-o', '--output-dir', help="Output directory.")
-        parser.add_argument('-p', '--password', help="Password (will prompt if not provided).")
-        parser.add_argument('-k', '--key-file', help="Optional key file for additional security.")
-        parser.add_argument('--shred', action='store_true', help="Securely delete originals after encryption.")
+        parser = argparse.ArgumentParser(
+            description="CryptKey 2.1 – Secure File & Directory Encryptor")
+        parser.add_argument('input_paths', nargs='*')
+        parser.add_argument('--cli', action='store_true')
+        parser.add_argument('-d', '--decrypt', action='store_true')
+        parser.add_argument('-o', '--output-dir')
+        parser.add_argument('-p', '--password')
+        parser.add_argument('-k', '--key-file')
+        parser.add_argument('--shred', action='store_true')
         args = parser.parse_args()
+
         if args.cli or args.input_paths:
             if not args.input_paths:
-                parser.error("At least one input path is required in CLI mode.")
+                parser.error("At least one input path is required.")
             if not args.output_dir:
-                parser.error("--output-dir is required in CLI mode.")
+                parser.error("--output-dir is required.")
             if not os.path.isdir(args.output_dir):
                 parser.error(f"Output directory does not exist: {args.output_dir}")
             if args.key_file and not os.path.exists(args.key_file):
-                parser.error(f"Key file does not exist: {args.key_file}")
+                parser.error(f"Key file not found: {args.key_file}")
             run_cli(args)
         else:
             app = QApplication(sys.argv)
+            app.setStyleSheet(STYLESHEET)
+            app.setStyle("Fusion")
             window = FileEncryptor()
             window.show()
             sys.exit(app.exec())
+
     except Exception as e:
-        logging.error(f"A critical error occurred: {e}\n{traceback.format_exc()}")
+        logging.error(f"Critical: {e}\n{traceback.format_exc()}")
         try:
             app = QApplication.instance() or QApplication(sys.argv)
-            error_box = QMessageBox()
-            error_box.setIcon(QMessageBox.Icon.Critical)
-            error_box.setText("A critical error occurred.")
-            error_box.setInformativeText(f"Please check the log file:\n{LOG_FILE_PATH or 'Console'}\n\nError: {e}")
-            error_box.setWindowTitle("Application Error")
-            error_box.exec()
+            app.setStyleSheet(STYLESHEET)
+            box = QMessageBox()
+            box.setIcon(QMessageBox.Icon.Critical)
+            box.setWindowTitle("CryptKey – Fatal Error")
+            box.setText("A critical error occurred.")
+            box.setInformativeText(f"Log: {LOG_FILE_PATH or 'console'}\n\n{e}")
+            box.exec()
         except Exception:
-            print(f"A critical error occurred, and the GUI error dialog could not be shown: {e}", file=sys.stderr)
+            print(f"Fatal: {e}", file=sys.stderr)
         sys.exit(1)
+
 
 if __name__ == '__main__':
     main()

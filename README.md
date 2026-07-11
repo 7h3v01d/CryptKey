@@ -1,162 +1,143 @@
 # CryptKey v1.6.0
 ### Secure File and Directory Encryptor
 
-⚠️ **LICENSE & USAGE NOTICE — READ FIRST**
+A Python application for securely encrypting and decrypting files and directories using AES-256-GCM for encryption, Argon2 for key derivation, and zlib for compression2.
 
-This repository is **source-available for private technical evaluation and testing only**.
-
-- ❌ No commercial use  
-- ❌ No production use  
-- ❌ No academic, institutional, or government use  
-- ❌ No research, benchmarking, or publication  
-- ❌ No redistribution, sublicensing, or derivative works  
-- ❌ No independent development based on this code  
-
-All rights remain exclusively with the author.  
-Use of this software constitutes acceptance of the terms defined in **LICENSE.txt**.
+### Features
 
 ---
-
-## Overview
-
-**CryptKey** is a Python-based application for securely encrypting and decrypting files and directories using modern cryptographic primitives.
-
-The project is published **solely for evaluation and showcase purposes**, demonstrating cryptographic design, secure file handling, and GUI/CLI tooling. It is **not** released as open-source software.
-
----
-
-## Features
-
-### Encryption & Security
-- Encrypt files and directories using **AES-256-GCM**
-- Preserve directory structures during encryption
-- **Argon2** key derivation for password hardening
-- Optional **key file** support (≤ 1 KB) for multi-factor protection
-- **SHA-256 integrity verification** on decryption
-- Secure shredding with multi-pass overwrite before deletion
-
-### Usability
-- Drag-and-drop **GUI interface**
-- Real-time **password strength feedback**
-- Built-in log viewer
-- Full **CLI support** for automation and scripting
-- Supports multiple input paths in a single operation
+Encryption: 
+- Encrypt files or directories with AES-256-GCM, preserving folder structures.
+- Decryption: Decrypt .enc files, including legacy files without metadata.
+- Key File Support: Optional key file (max 1KB) for enhanced security.
+- Integrity Check: SHA256 hash verification to ensure decrypted files are uncorrupted.
+- Secure Shredding: Overwrite original files multiple times before deletion.
+- GUI: Drag-and-drop interface, password strength feedback, and a built-in log viewer.
+- CLI: Command-line interface supporting multiple input paths for automation
 
 ---
+### Installation
 
-## Requirements
-
-- Python **3.8+**
-- PyQt6
-- cryptography
-- argon2-cffi
-- zxcvbn
-- tqdm
-
----
-
-## Installation (Evaluation Use Only)
-
-Verify Python version:
-```bash
+1. Ensure Python 3.8+ is installed:
+```Bash
 python --version
 ```
 Create and activate a virtual environment:
-```bash
+```Bash
 python -m venv venv
-```
-```bash
-.\venv\Scripts\activate      # Windows
-```
-```bash
-source venv/bin/activate    # Linux / macOS
+.\venv\Scripts\activate  # Windows
+source venv/bin/activate  # Linux/macOS
 ```
 Install dependencies:
-```bash
+```Bash
 pip install PyQt6 cryptography argon2-cffi zxcvbn tqdm
 ```
+
 ---
-
-## GUI Usage
-
+### GUI Usage
 Run the application:
-```bash
+```Bash
 python file_encryptor_enhanced.py
 ```
-Workflow:
-
-1. Select files or directories (buttons or drag-and-drop)
-2. Select output directory
-3. Enter password (strength feedback provided)
-4. Choose operation: Encrypt or Decrypt
-5. Click Start to begin processing
+1. **Select Files/Directories:** Use buttons or drag-and-drop files/folders into the list.
+2. **Select Output Directory:** Choose where to save processed files.
+3. **Enter Password:** Real-time strength feedback is provided.
+4. **Choose Operation:** Select "Encrypt" or "Decrypt".
+5. **Start Processing:** Click "Start" to begin.
 
 ---
+### CLI Usage
 
-## CLI Usage
-
-The CLI supports multiple input paths.</br>
-If -p is omitted, you will be prompted securely.
-
-### Encrypt multiple items
-```bash
-python file_encryptor_enhanced.py path/to/file1.txt path/to/folder2/ \
-  -o ./output -p password --cli [--shred]
+The CLI supports multiple input paths simultaneously. If -p is omitted, you will be prompted securely.
+Encrypt multiple items:
+```Bash
+python file_encryptor_enhanced.py path/to/file1.txt path/to/folder2/ -o ./output -p password --cli [--shred]
 ```
-### Decrypt a file
-```bash
+Decrypt a file:
+```Bash
 python file_encryptor_enhanced.py file1.txt.enc -o ./output -p password --cli -d
 ```
-### Use a key file
-```bash
+Use a Key File:
+```Bash
 python file_encryptor_enhanced.py input.txt -o ./output -p password --cli -k key.bin
 ```
-## Encrypted File Format
-
-CryptKey uses a structured binary format to ensure versioning, integrity, and backward compatibility.
+---
+### File Format
+The application uses a specific binary structure for .enc files to identify versions and ensure integrity:
 ```text
-Component        Size        Description
----------------------------------------------------------------
-Magic Number     4 bytes     Fixed value: ENC1 (new format)
-Salt             16 bytes    Argon2 key derivation salt
-Nonce            12 bytes    AES-GCM initialization vector
-Header Length    4 bytes     Big-endian encrypted header length
-Header           Variable    Encrypted JSON (filename, SHA-256)
-Ciphertext       Variable    zlib-compressed, AES-GCM encrypted data
-Auth Tag         16 bytes    AES-GCM authentication tag
+Component              Size             Description
+
+Magic Number          4 bytes           Hardcoded as ENC1 to identify the new format.
+
+Salt                  16 bytes          Used for Argon2 key derivation15.
+
+Nonce                 12 bytes          Initialization vector for AES-GCM16.
+
+Header Length         4 bytes           Big-endian length of the encrypted JSON header17.
+
+Header                Variable          Encrypted JSON containing original_filename and sha25618.
+
+Ciphertext            Variable          zlib-compressed file content, encrypted with AES-256-GCM19.
+
+Tag                   16 bytes          AES-GCM authentication tag for integrity verification20.
 ```
-Legacy files omit the Magic Number and Header fields.</br>
-They are automatically detected and decrypted as decrypted_<filename>.
+Note: Legacy files omit the Magic Number and Header components. They are automatically detected and saved as decrypted_<filename>
 
-## Logging
+---
+## Testing
+The test suite uses pytest and lives in `src/tests/`. From the `src/` directory:
+```bash
+pip install pytest
+python -m pytest
+```
+This runs 48 tests covering the crypto engine (encrypt/decrypt round trips,
+legacy format, tamper/corruption handling, key derivation), the Ed25519
+license engine (signing, verification, expiry, machine locking, tamper
+detection), and the app's license integration. Qt tests run headless via the
+`offscreen` platform plugin automatically (no display required).
 
-Logs are stored locally for diagnostic and evaluation purposes:
+---
+### Logging
 
+Logs are saved locally for troubleshooting:
 - Windows: %APPDATA%\FileEncryptor\file_encryptor.log
 - Linux/macOS: ~/.local/share/FileEncryptor/file_encryptor.log
 
 ---
+### Licensing Setup
+`file_encryptor_enhanced.py` verifies license keys with an embedded Ed25519
+public key (`LICENSE_PUBLIC_KEY`). A vendor keypair has already been
+generated and its public half is embedded in the source, so license
+verification is live.
 
-## Contribution Policy
+The **private** half (`keystore/vendor.key` in this delivery) is what
+`cryptkey_license_generator.py` needs to sign new license keys. The
+generator GUI always reads/writes its keystore at a fixed path —
+`~/.local/share/CryptKey/vendor.key` on Linux/macOS (it does not currently
+check `%APPDATA%` on Windows, unlike the main app's logging setup — worth
+fixing if you'll run the generator on Windows). To issue licenses from the
+generator, copy `keystore/vendor.key` and `keystore/vendor.pub.json` into
+that folder and unlock them with the master password below.
 
-Feedback, bug reports, and suggestions are welcome.
-
-You may submit:
-
-- Issues
-- Design feedback
-- Pull requests for review
-
-However:
-
-- Contributions do not grant any license or ownership rights
-- The author retains full discretion over acceptance and future use
-- Contributors receive no rights to reuse, redistribute, or derive from this code
+**Master password:** `feDKTh%eXtqZHZoe^lTW` — store this somewhere safe
+(e.g. a password manager) and rotate it by regenerating a keypair if it's
+ever exposed. Never commit `vendor.key` to source control or bundle it into
+the built app. If you lose or rotate it, run the generator to create a new
+keypair and re-embed the new public key in `file_encryptor_enhanced.py`,
+which will invalidate any previously issued licenses.
 
 ---
+### Notes
+- **Password Strength**: Passwords must score 3/4 or higher (via zxcvbn).
+- **Key File**: Enhances security but must be used consistently for encryption/decryption.
+- **Legacy Files**: Automatically detected and decrypted (named `decrypted_<filename>`).
+- **Shredding**: Permanently deletes originals with multiple random overwrites.
 
-License
-This project is not open-source.
+---
+## Contributing
+Submit issues or pull requests to the repository (TBD).
 
-It is licensed under a private evaluation-only license.
-See LICENSE.txt for full terms.
+---
+## License
+MIT License. See source code for details.
+
