@@ -1,7 +1,7 @@
 # CryptKey v2.1.0
 ### Secure File and Directory Encryptor
 
-A Python application for securely encrypting and decrypting files and directories using AES-256-GCM for encryption, Argon2 for key derivation, and zlib for compression2.
+A Python application for securely encrypting and decrypting files and directories using AES-256-GCM for encryption, Argon2 for key derivation, and zlib for compression.
 
 ### Features
 
@@ -14,6 +14,7 @@ Encryption:
 - Secure Shredding: Overwrite original files multiple times before deletion.
 - GUI: Drag-and-drop interface, password strength feedback, and a built-in log viewer.
 - CLI: Command-line interface supporting multiple input paths for automation
+- Licensing: Free/Personal/Commercial tiers, gated by Ed25519-signed license keys
 
 ---
 ### Installation
@@ -30,7 +31,7 @@ source venv/bin/activate  # Linux/macOS
 ```
 Install dependencies:
 ```Bash
-pip install PyQt6 cryptography argon2-cffi zxcvbn tqdm
+pip install -r requirements.txt
 ```
 
 ---
@@ -69,17 +70,17 @@ Component              Size             Description
 
 Magic Number          4 bytes           Hardcoded as ENC1 to identify the new format.
 
-Salt                  16 bytes          Used for Argon2 key derivation15.
+Salt                  16 bytes          Used for Argon2 key derivation.
 
-Nonce                 12 bytes          Initialization vector for AES-GCM16.
+Nonce                 12 bytes          Initialization vector for AES-GCM.
 
-Header Length         4 bytes           Big-endian length of the encrypted JSON header17.
+Header Length         4 bytes           Big-endian length of the encrypted JSON header.
 
-Header                Variable          Encrypted JSON containing original_filename and sha25618.
+Header                Variable          Encrypted JSON containing original_filename and sha256.
 
-Ciphertext            Variable          zlib-compressed file content, encrypted with AES-256-GCM19.
+Ciphertext            Variable          zlib-compressed file content, encrypted with AES-256-GCM.
 
-Tag                   16 bytes          AES-GCM authentication tag for integrity verification20.
+Tag                   16 bytes          AES-GCM authentication tag for integrity verification.
 ```
 Note: Legacy files omit the Magic Number and Header components. They are automatically detected and saved as decrypted_<filename>
 
