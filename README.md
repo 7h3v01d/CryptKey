@@ -3,6 +3,8 @@
 
 A Python application for securely encrypting and decrypting files and directories using AES-256-GCM for encryption, Argon2 for key derivation, and zlib for compression.
 
+<img width="922" height="758" alt="screenshot" src="https://github.com/user-attachments/assets/d23e8b96-520d-4e50-b1ff-7e65658bedfc" />
+
 ### Features
 
 ---
