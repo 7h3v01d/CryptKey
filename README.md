@@ -140,5 +140,7 @@ Submit issues or pull requests to the repository (TBD).
 
 ---
 ## License
-Leon Priest (PETL) v1.0. See License.
+This project is not open-source.
+
+It is licensed under a private evaluation-only license. See LICENSE.txt for full terms.
 
